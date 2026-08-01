@@ -9,7 +9,7 @@ export function FinalCta() {
           />
           <div className="relative">
             <p className="font-mono text-sm text-zinc-500 mb-6">
-              <span className="text-green-400">$</span> axi create my-app
+              <span className="text-green-400">$</span> bun create axi
             </p>
             <h2 className="mx-auto max-w-3xl text-4xl sm:text-6xl font-bold tracking-tight text-white">
               Find your <span className="italic font-serif">flow state</span>.

@@ -5,9 +5,6 @@ export function FeaturesGrid() {
     <div className="py-24 sm:py-32 border-border/40">
       {/* Header */}
       <div className="mx-auto max-w-7xl px-6 lg:px-8 mb-16">
-        <p className="mb-4 font-mono text-xs text-muted-foreground">
-          fullstack's flow state
-        </p>
         <h2 className="text-4xl font-bold tracking-tight text-foreground mb-4">
           Everything you need,{" "}
           <span className="text-muted-foreground">nothing you don't.</span>

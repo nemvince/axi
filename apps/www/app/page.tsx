@@ -1,6 +1,6 @@
+import { CodeShowcase } from "@/components/code-showcase";
 import { FeaturesGrid } from "@/components/features-grid";
 import { FinalCta } from "@/components/final-cta";
-import { TypingTerminal } from "@/components/typing-terminal";
 import { Button } from "@/components/ui/button";
 import { StarIcon } from "@phosphor-icons/react";
 
@@ -9,12 +9,6 @@ export default function HomePage() {
     <div className="relative min-h-screen">
       {/* Hero Section */}
       <div className="relative isolate sm:pt-14">
-        {/* Background Grid */}
-        <div
-          className="absolute inset-0 bg-grid-pattern bg-grid-fade pointer-events-none"
-          aria-hidden="true"
-        />
-
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
           <div className="mx-auto max-w-4xl text-center">
             {/* Headline with mixed typography */}
@@ -61,9 +55,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Terminal Code Block */}
-          <div className="mt-16 mx-auto max-w-3xl">
-            <TypingTerminal />
+          {/* Code Showcase */}
+          <div className="mt-16 mx-auto max-w-5xl">
+            <CodeShowcase />
           </div>
         </div>
       </div>
