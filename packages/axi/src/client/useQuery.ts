@@ -87,7 +87,12 @@ function buildRequestUrl(
   // Handle params (replace [param] with actual value)
   if (opts?.params) {
     for (const [k, v] of Object.entries(opts.params)) {
-      url = url.replace(`[${k}]`, String(v));
+      if (Array.isArray(v)) {
+        const joined = v.map(String).join("/");
+        url = url.replace(`[[...${k}]]`, joined).replace(`[...${k}]`, joined);
+      } else {
+        url = url.replace(`[${k}]`, String(v));
+      }
     }
   }
 

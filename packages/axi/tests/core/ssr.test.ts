@@ -506,3 +506,52 @@ describe("renderPage", () => {
     });
   });
 });
+
+describe("layout loader data", () => {
+  test("passes layout loader data to the layout component", async () => {
+    const pageModule = createPageModule();
+    const layoutModule: LayoutModule = {
+      default: ({ children, data }: { children: React.ReactNode; data?: unknown }) =>
+        React.createElement(
+          "div",
+          { "data-track": JSON.stringify(data) },
+          children
+        ),
+    };
+
+    const stream = await renderPage(
+      pageModule,
+      [layoutModule],
+      {},
+      {},
+      false,
+      "/",
+      undefined,
+      undefined,
+      [{ websiteId: "abc-123" }]
+    );
+    const html = await streamToString(stream);
+
+    expect(html).toContain('data-track="{&quot;websiteId&quot;:&quot;abc-123&quot;}"');
+  });
+
+  test("serializes layout data into window.__AXI_DATA__ for hydration", async () => {
+    const pageModule = createPageModule();
+    const layoutModule: LayoutModule = { default: () => null };
+
+    const stream = await renderPage(
+      pageModule,
+      [layoutModule],
+      {},
+      {},
+      false,
+      "/",
+      undefined,
+      undefined,
+      [{ websiteId: "abc-123" }]
+    );
+    const html = await streamToString(stream);
+
+    expect(html).toContain('"layoutData":[{"websiteId":"abc-123"}]');
+  });
+});

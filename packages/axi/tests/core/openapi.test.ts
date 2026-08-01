@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdir, rm } from "fs/promises";
+import { mkdir, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import { generateOpenAPISpec } from "../../src/openapi/generator";
 import { isZodSchema, zodToJsonSchema } from "../../src/openapi/zod-to-json-schema";
@@ -316,5 +316,51 @@ describe("generateOpenAPISpec", () => {
     expect(spec.info.version).toBe("2.0.0");
     expect(spec.info.description).toBe("A test API");
     expect(spec.servers?.[0]?.url).toBe("https://api.example.com");
+  });
+
+  test("converts catch-all route paths to OpenAPI path params", async () => {
+    await mkdir(join(APP_DIR, "api", "files", "[...path]"), { recursive: true });
+    await writeFile(
+      join(APP_DIR, "api", "files", "[...path]", "route.ts"),
+      `const getFile = () => new Response("ok");
+(getFile as any).__method = "GET";
+export { getFile };`
+    );
+
+    try {
+      const spec = await generateOpenAPISpec(APP_DIR);
+
+      expect(spec.paths["/api/files/{path}"]).toBeDefined();
+      const params = spec.paths["/api/files/{path}"]?.get?.parameters;
+      expect(params).toContainEqual(
+        expect.objectContaining({ name: "path", in: "path", required: true })
+      );
+    } finally {
+      await rm(join(APP_DIR, "api", "files"), { recursive: true, force: true });
+    }
+  });
+
+  test("converts optional catch-all route paths to OpenAPI path params", async () => {
+    await mkdir(join(APP_DIR, "api", "docs", "[[...slug]]"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(APP_DIR, "api", "docs", "[[...slug]]", "route.ts"),
+      `const getDoc = () => new Response("ok");
+(getDoc as any).__method = "GET";
+export { getDoc };`
+    );
+
+    try {
+      const spec = await generateOpenAPISpec(APP_DIR);
+
+      expect(spec.paths["/api/docs/{slug}"]).toBeDefined();
+      const params = spec.paths["/api/docs/{slug}"]?.get?.parameters;
+      expect(params).toContainEqual(
+        expect.objectContaining({ name: "slug", in: "path", required: true })
+      );
+    } finally {
+      await rm(join(APP_DIR, "api", "docs"), { recursive: true, force: true });
+    }
   });
 });

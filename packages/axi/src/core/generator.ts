@@ -14,7 +14,7 @@ import {
     buildApiObject,
     generateTypeAliases,
 } from "./generator/type-helpers";
-import { routePathToUrl, toBunRoutePath } from "./router";
+import { routePathToUrl, routeToClientPath } from "./router";
 import { scanApiRoutes, scanLayouts, scanPageRoutes } from "./scanner";
 import { dynamicImport, resolveAbsolutePath } from "./utils";
 
@@ -57,10 +57,10 @@ function insertRouteMethod(
 ): void {
   let current = node;
 
-  // Only traverse static segments, skip dynamic ones (starting with ":")
+  // Only traverse static segments, skip dynamic ones (starting with ":" or "[")
   // This flattens routes like /users/:id to just /users with the handler attached
   for (const segment of segments) {
-    if (segment.startsWith(":")) continue;
+    if (segment.startsWith(":") || segment.startsWith("[")) continue;
     if (!current.children.has(segment)) {
       current.children.set(segment, createRouteTreeNode());
     }
@@ -184,7 +184,7 @@ export async function generateApiClient(
       if (handlers.length === 0) continue;
 
       // Get clean paths
-      const routePath = toBunRoutePath(route);
+      const routePath = routeToClientPath(route);
       const clientPath = routePath.replace(/^\/api\/?/, "") || "/";
       const urlPath = routePath.replace(/:([^/]+)/g, "[$1]");
       const segments =
@@ -302,7 +302,14 @@ function generateClientCode(
     "): Promise<ClientResponse<TResponse>> {",
     "  let url = path;",
     "  if (opts?.params) {",
-    "    for (const [k, v] of Object.entries(opts.params)) url = url.replace(`[${k}]`, String(v));",
+    "    for (const [k, v] of Object.entries(opts.params)) {",
+    "      if (Array.isArray(v)) {",
+    "        const joined = v.map(String).join('/');",
+    "        url = url.replace(`[[...${k}]]`, joined).replace(`[...${k}]`, joined);",
+    "      } else {",
+    "        url = url.replace(`[${k}]`, String(v));",
+    "      }",
+    "    }",
     "  }",
     "  if (opts?.query) {",
     "    const p = new URLSearchParams();",

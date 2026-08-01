@@ -78,6 +78,8 @@ function parseSegment(
 
 /**
  * Build a regex pattern from route path segments, collecting params
+ * Optional catch-alls are matched as an optional group so the bare prefix
+ * (e.g. /blog for /blog/[[...slug]]) also matches.
  */
 function buildRoutePattern(
   routePath: string,
@@ -95,18 +97,18 @@ function buildRoutePattern(
       const parsed = parseSegment(segment);
       switch (parsed.kind) {
         case "static":
-          return parsed.value;
+          return "/" + parsed.value;
         case "dynamic":
           paramNames.push(parsed.name);
-          return "([^/]+)";
+          return "/([^/]+)";
         case "catchall":
           paramNames.push(parsed.name);
           catchallNames.push(parsed.name);
-          return parsed.optional ? "(.*)" : "(.+)";
+          return parsed.optional ? "(?:/(.*))?" : "/(.+)";
       }
     });
 
-  return new RegExp("^/" + regexParts.join("/") + "$");
+  return new RegExp("^" + regexParts.join("") + "$");
 }
 
 /**
@@ -257,4 +259,11 @@ export function toBunRoutePath(route: Route): string {
  */
 export function routeToClientPath(route: Route): string {
   return normalizeRoutePath(transformFilePath(route.filepath, route.type));
+}
+
+/**
+ * Check if a route uses an optional catch-all ([[...param]]) segment
+ */
+export function routeHasOptionalCatchall(route: Route): boolean {
+  return /\[\[\.\.\.[^\]]+\]\]/.test(route.filepath);
 }

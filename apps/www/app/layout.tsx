@@ -1,6 +1,6 @@
 import { Footer } from "@/components/footer";
 import { Navigation } from "@/components/navigation";
-import type { PageMetadata } from "@axi-js/core";
+import type { LayoutProps, PageMetadata } from "@axi-js/core";
 import { ThemeProvider } from "@axi-js/core/theme";
 import React from "react";
 import "./index.css";
@@ -29,7 +29,7 @@ export const metadata: PageMetadata = {
       url: "/axi.png",
       width: 1200,
       height: 630,
-      alt: "Axi - A Simple Full-Stack Framework Built on Bun",
+      alt: "Full-stack's flow state",
     },
   },
   twitter: {
@@ -37,18 +37,38 @@ export const metadata: PageMetadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+interface LayoutLoaderData {
+  umamiUrl: string;
+  umamiWebsiteId?: string;
+}
+
+// Umami analytics. Read server-side in a layout loader so the tracking id and
+// env access never reach the client bundle. Without UMAMI_WEBSITE_ID no
+// tracking script is rendered.
+export const loader = (): LayoutLoaderData => ({
+  umamiUrl: process.env.UMAMI_URL || "https://umami.vnce.eu",
+  umamiWebsiteId: process.env.UMAMI_WEBSITE_ID,
+});
+
+export default function RootLayout({ children, data }: LayoutProps) {
+  const { umamiUrl, umamiWebsiteId } = (data ?? {}) as LayoutLoaderData;
+
   return (
-    <ThemeProvider>
-      <div className="flex min-h-screen flex-col">
-        <Navigation />
-        <main className="flex-1 pt-16">{children}</main>
-        <Footer />
-      </div>
-    </ThemeProvider>
+    <>
+      {umamiWebsiteId ? (
+        <script
+          defer
+          src={`${umamiUrl}/script.js`}
+          data-website-id={umamiWebsiteId}
+        />
+      ) : null}
+      <ThemeProvider>
+        <div className="flex min-h-screen flex-col">
+          <Navigation />
+          <main className="flex-1 pt-16">{children}</main>
+          <Footer />
+        </div>
+      </ThemeProvider>
+    </>
   );
 }

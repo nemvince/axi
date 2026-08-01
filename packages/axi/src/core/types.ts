@@ -114,7 +114,7 @@ export interface PageMetadata {
  * Route match result with extracted params and query
  */
 export interface RouteMatch {
-  params: Record<string, string>;
+  params: Record<string, string | string[]>;
   query: Record<string, string>;
 }
 
@@ -125,6 +125,8 @@ export interface Route {
   pattern: RegExp;
   filepath: string;
   paramNames: string[];
+  /** Param names that are catch-alls (params.catchallName is a string[]) */
+  catchallNames?: string[];
   type: "page" | "api" | "ws";
 }
 
@@ -227,8 +229,16 @@ export type WebSocketData =
  * Page component props with route params, query, and loader data
  */
 export interface PageProps {
-  params: Record<string, string>;
+  params: RouteParams;
   query: Record<string, string>;
+  data?: unknown;
+}
+
+/**
+ * Layout component props with children and server loader data
+ */
+export interface LayoutProps {
+  children: React.ReactNode;
   data?: unknown;
 }
 
@@ -236,7 +246,7 @@ export interface PageProps {
  * Context passed to page loader functions
  */
 export interface LoaderContext {
-  params: Record<string, string>;
+  params: RouteParams;
   query: Record<string, string>;
   context: Record<string, unknown>;
 }
@@ -251,11 +261,13 @@ export interface PageModule {
 }
 
 /**
- * Layout module with React component
+ * Layout module with React component, optional metadata, and optional
+ * server-side loader. Loader data is passed to the layout as `data`.
  */
 export interface LayoutModule {
-  default: React.ComponentType<{ children: React.ReactNode }>;
+  default: React.ComponentType<LayoutProps>;
   metadata?: PageMetadata;
+  loader?: (context: LoaderContext) => unknown | Promise<unknown>;
 }
 
 /**
@@ -263,7 +275,7 @@ export interface LayoutModule {
  */
 export interface MiddlewareContext {
   request: Request;
-  params: Record<string, string>;
+  params: RouteParams;
   query: Record<string, string>;
   context: Record<string, unknown>;
 }
@@ -309,10 +321,7 @@ export type RouteModules = Record<string, React.ComponentType<PageProps>>;
 /**
  * Layout modules map for client hydration
  */
-export type LayoutModules = Record<
-  string,
-  React.ComponentType<{ children: React.ReactNode }>
->;
+export type LayoutModules = Record<string, React.ComponentType<LayoutProps>>;
 
 /**
  * Server configuration returned by buildServerConfig

@@ -354,12 +354,13 @@ function renderTwitterTags(
 export async function renderPage(
   pageModule: PageModule,
   layoutModules: LayoutModule[],
-  params: Record<string, string>,
+  params: Record<string, string | string[]>,
   query: Record<string, string>,
   development: boolean = false,
   pathname: string = "/",
   buildHashes?: BuildHashes,
-  loaderData?: unknown
+  loaderData?: unknown,
+  layoutData?: unknown[]
 ): Promise<ReadableStream> {
   const PageComponent = pageModule.default;
 
@@ -384,7 +385,10 @@ export async function renderPage(
   for (let i = layoutModules.length - 1; i >= 0; i--) {
     const LayoutComponent = layoutModules[i]?.default;
     if (LayoutComponent) {
-      content = React.createElement(LayoutComponent, { children: content });
+      content = React.createElement(LayoutComponent, {
+        children: content,
+        data: layoutData?.[i],
+      });
     }
   }
 
@@ -398,7 +402,7 @@ export async function renderPage(
   // Initial state for client hydration
   const initScript = React.createElement("script", {
     dangerouslySetInnerHTML: {
-      __html: `window.__AXI_DATA__=${JSON.stringify({ params, query, pathname, loaderData })};`,
+      __html: `window.__AXI_DATA__=${JSON.stringify({ params, query, pathname, loaderData, layoutData })};`,
     },
   });
 

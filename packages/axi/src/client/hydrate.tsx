@@ -11,16 +11,17 @@ import React from "react";
 import { hydrateRoot } from "react-dom/client";
 import { countStaticSegments } from "../core/router";
 import type { LayoutModules, RouteModules } from "../core/types";
+import type { LayoutProps } from "../core/types";
 import { Router, createRoutePattern, type RouteConfig } from "./router";
-
 // Check if we have SSR content
 declare global {
   interface Window {
     __AXI_DATA__?: {
-      params: Record<string, string>;
+      params: Record<string, string | string[]>;
       query: Record<string, string>;
       pathname: string;
       loaderData?: unknown;
+      layoutData?: unknown[];
     };
   }
 }
@@ -35,18 +36,17 @@ export async function initAxi(
 ) {
   // Setup routes
   const routes: RouteConfig[] = [];
-  const layouts = new Map<
-    string,
-    React.ComponentType<{ children: React.ReactNode }>
-  >();
+  const layouts = new Map<string, React.ComponentType<LayoutProps>>();
 
   for (const [routePath, component] of Object.entries(routeModules)) {
-    const { pattern, paramNames } = createRoutePattern(routePath);
+    const { pattern, paramNames, catchallNames } =
+      createRoutePattern(routePath);
     routes.push({
       path: routePath,
       component,
       pattern,
       paramNames,
+      catchallNames,
     });
   }
 
@@ -69,9 +69,15 @@ export async function initAxi(
 
   // Get initial loader data from server
   const initialLoaderData = window.__AXI_DATA__?.loaderData;
+  const initialLayoutData = window.__AXI_DATA__?.layoutData;
 
   const App = () => (
-    <Router routes={routes} layouts={layouts} initialLoaderData={initialLoaderData} />
+    <Router
+      routes={routes}
+      layouts={layouts}
+      initialLoaderData={initialLoaderData}
+      initialLayoutData={initialLayoutData}
+    />
   );
 
   const rootElement = document.getElementById("root");

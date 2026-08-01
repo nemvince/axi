@@ -11,7 +11,7 @@ import React, {
     useState,
 } from "react";
 import { getApplicableLayoutPaths } from "../core/shared";
-import type { PageProps } from "../core/types";
+import type { LayoutProps, PageProps } from "../core/types";
 
 /**
  * Router context for sharing navigation state
@@ -19,7 +19,7 @@ import type { PageProps } from "../core/types";
 interface RouterContextValue {
   pathname: string;
   navigate: (path: string) => Promise<void>;
-  params: Record<string, string>;
+  params: Record<string, string | string[]>;
   isNavigating: boolean;
 }
 
@@ -30,13 +30,15 @@ export interface RouteConfig {
   component: React.ComponentType<PageProps>;
   pattern: RegExp;
   paramNames: string[];
+  catchallNames?: string[];
 }
 
 export interface RouterProps {
   routes: RouteConfig[];
-  layouts?: Map<string, React.ComponentType<{ children: React.ReactNode }>>;
+  layouts?: Map<string, React.ComponentType<LayoutProps>>;
   notFound?: React.ComponentType;
   initialLoaderData?: unknown;
+  initialLayoutData?: unknown[];
 }
 
 /**
@@ -45,13 +47,18 @@ export interface RouterProps {
 function matchRoute(
   pathname: string,
   route: RouteConfig
-): { params: Record<string, string> } | null {
+): { params: Record<string, string | string[]> } | null {
   const match = pathname.match(route.pattern);
   if (!match) return null;
 
-  const params: Record<string, string> = {};
+  const params: Record<string, string | string[]> = {};
   route.paramNames.forEach((name, i) => {
-    params[name] = match[i + 1] || "";
+    const value = match[i + 1] || "";
+    params[name] = route.catchallNames?.includes(name)
+      ? value
+        ? value.split("/")
+        : []
+      : value;
   });
 
   return { params };
@@ -60,20 +67,52 @@ function matchRoute(
 /**
  * Convert route pattern to RegExp
  * /blog/[slug] -> /blog/([^/]+)
+ * /blog/[...slug] -> /blog/(.+)
+ * /blog/[[...slug]] -> /blog/(.*)
  */
 export function createRoutePattern(path: string): {
   pattern: RegExp;
   paramNames: string[];
+  catchallNames: string[];
 } {
   const paramNames: string[] = [];
-  const regexPath = path.replace(/\[([^\]]+)\]/g, (_, paramName) => {
-    paramNames.push(paramName);
-    return "([^/]+)";
-  });
+  const catchallNames: string[] = [];
+
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return { pattern: /^\/$/, paramNames, catchallNames };
+  }
+
+  const regexPath = segments
+    .map((segment) => {
+      const optionalCatchall = segment.match(/^\[\[\.\.\.([^\]]+)\]\]$/);
+      if (optionalCatchall) {
+        paramNames.push(optionalCatchall[1]!);
+        catchallNames.push(optionalCatchall[1]!);
+        return "(?:/(.*))?";
+      }
+
+      const catchall = segment.match(/^\[\.\.\.([^\]]+)\]$/);
+      if (catchall) {
+        paramNames.push(catchall[1]!);
+        catchallNames.push(catchall[1]!);
+        return "/(.+)";
+      }
+
+      const dynamic = segment.match(/^\[([^\]]+)\]$/);
+      if (dynamic) {
+        paramNames.push(dynamic[1]!);
+        return "/([^/]+)";
+      }
+
+      return "/" + segment;
+    })
+    .join("");
 
   return {
     pattern: new RegExp("^" + regexPath + "$"),
     paramNames,
+    catchallNames,
   };
 }
 
@@ -82,13 +121,11 @@ export function createRoutePattern(path: string): {
  */
 function getLayoutsForPath(
   pathname: string,
-  layouts?: Map<string, React.ComponentType<{ children: React.ReactNode }>>
-): React.ComponentType<{ children: React.ReactNode }>[] {
+  layouts?: Map<string, React.ComponentType<LayoutProps>>
+): React.ComponentType<LayoutProps>[] {
   if (!layouts) return [];
 
-  const applicableLayouts: React.ComponentType<{
-    children: React.ReactNode;
-  }>[] = [];
+  const applicableLayouts: React.ComponentType<LayoutProps>[] = [];
 
   // Get layout paths using shared utility
   const layoutPaths = getApplicableLayoutPaths(pathname);
@@ -107,13 +144,14 @@ function getLayoutsForPath(
  */
 function wrapWithLayouts(
   content: React.ReactElement,
-  layouts: React.ComponentType<{ children: React.ReactNode }>[]
+  layouts: React.ComponentType<LayoutProps>[],
+  layoutData?: unknown[]
 ): React.ReactElement {
   let wrapped = content;
   for (let i = layouts.length - 1; i >= 0; i--) {
     const Layout = layouts[i];
     if (Layout) {
-      wrapped = <Layout>{wrapped}</Layout>;
+      wrapped = <Layout data={layoutData?.[i]}>{wrapped}</Layout>;
     }
   }
   return wrapped;
@@ -124,9 +162,9 @@ function wrapWithLayouts(
  */
 async function fetchLoaderData(
   pathname: string,
-  params: Record<string, string>,
+  params: Record<string, string | string[]>,
   query: Record<string, string>
-): Promise<unknown> {
+): Promise<{ data: unknown; layoutData?: unknown[] }> {
   try {
     const res = await fetch("/__axi/loader", {
       method: "POST",
@@ -138,12 +176,12 @@ async function fetchLoaderData(
     // Handle middleware redirect
     if (json.redirect) {
       window.location.href = json.redirect;
-      return undefined;
+      return { data: undefined };
     }
 
-    return json.data;
+    return { data: json.data, layoutData: json.layoutData };
   } catch {
-    return undefined;
+    return { data: undefined };
   }
 }
 
@@ -155,11 +193,15 @@ export function Router({
   layouts,
   notFound,
   initialLoaderData,
+  initialLayoutData,
 }: RouterProps) {
   const [currentPath, setCurrentPath] = useState(() =>
     typeof window !== "undefined" ? window.location.pathname : "/"
   );
   const [loaderData, setLoaderData] = useState<unknown>(initialLoaderData);
+  const [layoutData, setLayoutData] = useState<unknown[] | undefined>(
+    initialLayoutData
+  );
   const [isNavigating, setIsNavigating] = useState(false);
 
   // Find matching route for current path
@@ -199,10 +241,11 @@ export function Router({
       });
 
       // Fetch loader data
-      const data = await fetchLoaderData(newPath, params, query);
+      const { data, layoutData } = await fetchLoaderData(newPath, params, query);
 
       // Update state
       setLoaderData(data);
+      setLayoutData(layoutData);
       window.history.pushState({}, "", path);
       setCurrentPath(newPath);
       setIsNavigating(false);
@@ -232,9 +275,10 @@ export function Router({
       });
 
       // Fetch loader data for back/forward navigation
-      const data = await fetchLoaderData(newPath, params, query);
+      const { data, layoutData } = await fetchLoaderData(newPath, params, query);
 
       setLoaderData(data);
+      setLayoutData(layoutData);
       setCurrentPath(newPath);
       setIsNavigating(false);
     };
@@ -306,7 +350,11 @@ export function Router({
     // Render 404 if no match
     const NotFoundComponent = notFound || DefaultNotFound;
     const applicableLayouts = getLayoutsForPath(currentPath, layouts);
-    content = wrapWithLayouts(<NotFoundComponent />, applicableLayouts);
+    content = wrapWithLayouts(
+      <NotFoundComponent />,
+      applicableLayouts,
+      layoutData
+    );
   } else {
     // Render matched route
     const PageComponent = matchedRoute.component;
@@ -319,7 +367,8 @@ export function Router({
     const applicableLayouts = getLayoutsForPath(currentPath, layouts);
     content = wrapWithLayouts(
       <PageComponent {...pageProps} />,
-      applicableLayouts
+      applicableLayouts,
+      layoutData
     );
   }
 
@@ -371,7 +420,7 @@ export function useRouter() {
  * // In /blog/[blogId]/page.tsx
  * const { blogId } = useParams();
  */
-export function useParams(): Record<string, string> {
+export function useParams(): Record<string, string | string[]> {
   const context = useContext(RouterContext);
   if (!context) {
     // During SSR, return empty params since there's no Router provider

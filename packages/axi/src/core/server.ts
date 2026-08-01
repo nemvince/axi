@@ -16,6 +16,7 @@ import { generateApiClient, generateRoutesFile } from "./generator";
 import {
     getRequestUrl,
     matchRoute,
+    routeHasOptionalCatchall,
     sortRoutes,
     toBunRoutePath,
 } from "./router";
@@ -743,6 +744,15 @@ class AxiServer {
           console.error(`Failed to load API route: ${apiPath}`, error);
         }
       }
+
+      // For optional catch-all API routes, also register the bare prefix so
+      // zero remaining segments (e.g. /api/files for [[...path]]) match.
+      if (routePath.endsWith("/*") && routeHasOptionalCatchall(route)) {
+        const prefixPath = routePath.slice(0, -2);
+        if (prefixPath && prefixPath !== "/" && !routes[prefixPath]) {
+          routes[prefixPath] = routes[routePath]!;
+        }
+      }
     }
 
     // Build SSR page routes (all pages are SSR'd)
@@ -867,7 +877,7 @@ class AxiServer {
   private async executeMiddleware(
     req: Request,
     urlPath: string,
-    params: Record<string, string>,
+    params: Record<string, string | string[]>,
     query: Record<string, string>
   ): Promise<{ response?: Response; context: Record<string, unknown> }> {
     // Get applicable middleware paths (same logic as layouts)
@@ -993,6 +1003,20 @@ class AxiServer {
         }
       }
 
+      // Run layout loaders (server-side only); data is passed to each layout
+      const layoutData: unknown[] = [];
+      for (const layoutModule of layoutModules) {
+        layoutData.push(
+          typeof layoutModule.loader === "function"
+            ? await layoutModule.loader({
+                params: match.params,
+                query: match.query,
+                context: middlewareResult.context,
+              })
+            : undefined
+        );
+      }
+
       const stream = await renderPage(
         pageModule,
         layoutModules,
@@ -1006,7 +1030,8 @@ class AxiServer {
               stylesHash: this.buildMetadata.stylesHash,
             }
           : undefined,
-        loaderData
+        loaderData,
+        layoutData
       );
 
       return new Response(stream, {
@@ -1026,7 +1051,7 @@ class AxiServer {
     try {
       const body = await req.json() as {
         pathname: string;
-        params: Record<string, string>;
+        params: Record<string, string | string[]>;
         query: Record<string, string>;
       };
 
@@ -1056,18 +1081,34 @@ class AxiServer {
         );
       }
 
-      // Find matching page route
-      const route = this.pageRoutes.find((r) => {
-        // Convert route pattern to check against pathname
-        const routePath = toBunRoutePath(r);
-        // Simple pattern matching - convert [param] to regex
-        const pattern = routePath.replace(/:([^/]+)/g, "[^/]+");
-        const regex = new RegExp(`^${pattern}$`);
-        return regex.test(body.pathname);
-      });
+      // Find matching page route (routes are sorted most-specific first)
+      const route = this.pageRoutes.find((r) => r.pattern.test(body.pathname));
+
+      // Run layout loaders for the path (server-only data, mirrors SSR order)
+      const layoutData: unknown[] = [];
+      const layoutPaths = getApplicableLayoutPaths(body.pathname);
+      for (const path of layoutPaths) {
+        if (this.layouts.has(path)) {
+          const layoutPath = join(this.config.appDir, this.layouts.get(path)!);
+          const absoluteLayoutPath = resolveAbsolutePath(layoutPath);
+          const layoutModule = await dynamicImport<LayoutModule>(
+            absoluteLayoutPath,
+            this.config.development
+          );
+          layoutData.push(
+            typeof layoutModule.loader === "function"
+              ? await layoutModule.loader({
+                  params: body.params,
+                  query: body.query,
+                  context: middlewareResult.context,
+                })
+              : undefined
+          );
+        }
+      }
 
       if (!route) {
-        return Response.json({ data: null });
+        return Response.json({ data: null, layoutData });
       }
 
       const pagePath = join(this.config.appDir, route.filepath);
@@ -1078,7 +1119,7 @@ class AxiServer {
       );
 
       if (typeof pageModule.loader !== "function") {
-        return Response.json({ data: null });
+        return Response.json({ data: null, layoutData });
       }
 
       const data = await pageModule.loader({
@@ -1087,7 +1128,7 @@ class AxiServer {
         context: middlewareResult.context,
       });
 
-      return Response.json({ data });
+      return Response.json({ data, layoutData });
     } catch (error) {
       console.error(`Loader error: ${getErrorMessage(error)}`);
       return Response.json({ data: null, error: getErrorMessage(error) }, { status: 500 });
@@ -1155,6 +1196,14 @@ class AxiServer {
 
             return new Response(file, { headers });
           }
+        }
+
+        // Try matching catch-all page routes (handled here since they map to
+        // wildcard paths that would collide with this fallback)
+        for (const route of this.pageRoutes) {
+          if (!route.catchallNames?.length) continue;
+          if (!matchRoute(req, route)) continue;
+          return this.handlePageRequest(req, route);
         }
 
         // No matching route found - return 404

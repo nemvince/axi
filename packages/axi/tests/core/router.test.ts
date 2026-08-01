@@ -10,6 +10,7 @@ import {
   sortRoutes,
   toBunRoutePath,
   routePathToUrl,
+  routeToClientPath,
   countStaticSegments,
 } from "../../src/core/router";
 import type { Route } from "../../src/core/types";
@@ -83,6 +84,51 @@ describe("router", () => {
       expect(route.pattern.test("/blog/2024/hello")).toBe(false);
       expect(route.paramNames).toEqual(["year", "slug"]);
     });
+
+    test("converts catch-all page route", () => {
+      const route = filePathToRoute("blog/[...slug]/page.tsx", "page");
+      expect(route.pattern.test("/blog/hello")).toBe(true);
+      expect(route.pattern.test("/blog/hello/world")).toBe(true);
+      expect(route.pattern.test("/blog/hello/world/again")).toBe(true);
+      expect(route.pattern.test("/blog")).toBe(false);
+      expect(route.paramNames).toEqual(["slug"]);
+      expect(route.catchallNames).toEqual(["slug"]);
+    });
+
+    test("converts optional catch-all page route", () => {
+      const route = filePathToRoute("blog/[[...slug]]/page.tsx", "page");
+      expect(route.pattern.test("/blog")).toBe(true);
+      expect(route.pattern.test("/blog/hello")).toBe(true);
+      expect(route.pattern.test("/blog/hello/world")).toBe(true);
+      expect(route.paramNames).toEqual(["slug"]);
+      expect(route.catchallNames).toEqual(["slug"]);
+    });
+
+    test("converts root optional catch-all route", () => {
+      const route = filePathToRoute("[[...slug]]/page.tsx", "page");
+      expect(route.pattern.test("/")).toBe(true);
+      expect(route.pattern.test("/hello")).toBe(true);
+      expect(route.pattern.test("/hello/world")).toBe(true);
+      expect(route.paramNames).toEqual(["slug"]);
+      expect(route.catchallNames).toEqual(["slug"]);
+    });
+
+    test("converts API catch-all route", () => {
+      const route = filePathToRoute("api/files/[...path]/route.ts", "api");
+      expect(route.pattern.test("/api/files/a/b/c")).toBe(true);
+      expect(route.paramNames).toEqual(["path"]);
+      expect(route.catchallNames).toEqual(["path"]);
+    });
+
+    test("handles catch-all preceded by a dynamic segment", () => {
+      const route = filePathToRoute(
+        "api/orgs/[orgId]/repos/[...path]/route.ts",
+        "api"
+      );
+      expect(route.pattern.test("/api/orgs/42/repos/foo/bar")).toBe(true);
+      expect(route.paramNames).toEqual(["orgId", "path"]);
+      expect(route.catchallNames).toEqual(["path"]);
+    });
   });
 
   describe("matchRoute", () => {
@@ -127,6 +173,49 @@ describe("router", () => {
       expect(match).not.toBeNull();
       expect(match?.params).toEqual({ slug: "hello" });
       expect(match?.query).toEqual({ preview: "true" });
+    });
+
+    test("extracts catch-all param as array", () => {
+      const route = filePathToRoute("blog/[...slug]/page.tsx", "page");
+      const match = matchRoute(
+        createRequest("http://localhost:3000/blog/a/b/c"),
+        route
+      );
+      expect(match).not.toBeNull();
+      expect(match?.params).toEqual({ slug: ["a", "b", "c"] });
+    });
+
+    test("extracts single-segment catch-all param as single-element array", () => {
+      const route = filePathToRoute("blog/[...slug]/page.tsx", "page");
+      const match = matchRoute(
+        createRequest("http://localhost:3000/blog/hello"),
+        route
+      );
+      expect(match).not.toBeNull();
+      expect(match?.params).toEqual({ slug: ["hello"] });
+    });
+
+    test("extracts empty optional catch-all as empty array", () => {
+      const route = filePathToRoute("blog/[[...slug]]/page.tsx", "page");
+      const match = matchRoute(
+        createRequest("http://localhost:3000/blog"),
+        route
+      );
+      expect(match).not.toBeNull();
+      expect(match?.params).toEqual({ slug: [] });
+    });
+
+    test("extracts mixed params and catch-all", () => {
+      const route = filePathToRoute(
+        "api/orgs/[orgId]/repos/[...path]/route.ts",
+        "api"
+      );
+      const match = matchRoute(
+        createRequest("http://localhost:3000/api/orgs/42/repos/foo/bar"),
+        route
+      );
+      expect(match).not.toBeNull();
+      expect(match?.params).toEqual({ orgId: "42", path: ["foo", "bar"] });
     });
 
     test("returns null for non-matching route", () => {
@@ -293,6 +382,36 @@ describe("router", () => {
       expect(sorted[3]?.filepath).toBe("blog/[slug]/page.tsx");
     });
 
+    test("prioritizes dynamic param over catch-all", () => {
+      const routes: Route[] = [
+        filePathToRoute("blog/[...slug]/page.tsx", "page"),
+        filePathToRoute("blog/[slug]/page.tsx", "page"),
+      ];
+      const sorted = sortRoutes(routes);
+      expect(sorted[0]?.filepath).toBe("blog/[slug]/page.tsx");
+      expect(sorted[1]?.filepath).toBe("blog/[...slug]/page.tsx");
+    });
+
+    test("prioritizes static segments over catch-all", () => {
+      const routes: Route[] = [
+        filePathToRoute("blog/[...slug]/page.tsx", "page"),
+        filePathToRoute("blog/posts/page.tsx", "page"),
+      ];
+      const sorted = sortRoutes(routes);
+      expect(sorted[0]?.filepath).toBe("blog/posts/page.tsx");
+      expect(sorted[1]?.filepath).toBe("blog/[...slug]/page.tsx");
+    });
+
+    test("prioritizes root page over optional catch-all", () => {
+      const routes: Route[] = [
+        filePathToRoute("[[...slug]]/page.tsx", "page"),
+        filePathToRoute("page.tsx", "page"),
+      ];
+      const sorted = sortRoutes(routes);
+      expect(sorted[0]?.filepath).toBe("page.tsx");
+      expect(sorted[1]?.filepath).toBe("[[...slug]]/page.tsx");
+    });
+
     test("maintains order for identical specificity", () => {
       const routes: Route[] = [
         filePathToRoute("a/page.tsx", "page"),
@@ -343,6 +462,46 @@ describe("router", () => {
     test("converts WebSocket route to Bun path", () => {
       const route = filePathToRoute("ws/chat/route.ts", "ws");
       expect(toBunRoutePath(route)).toBe("/ws/chat");
+    });
+
+    test("converts catch-all route to Bun wildcard", () => {
+      const route = filePathToRoute("blog/[...slug]/page.tsx", "page");
+      expect(toBunRoutePath(route)).toBe("/blog/*");
+    });
+
+    test("converts optional catch-all route to Bun wildcard", () => {
+      const route = filePathToRoute("blog/[[...slug]]/page.tsx", "page");
+      expect(toBunRoutePath(route)).toBe("/blog/*");
+    });
+
+    test("converts API catch-all route to Bun wildcard", () => {
+      const route = filePathToRoute("api/files/[...path]/route.ts", "api");
+      expect(toBunRoutePath(route)).toBe("/api/files/*");
+    });
+
+    test("converts catch-all with mixed params to Bun path", () => {
+      const route = filePathToRoute(
+        "api/orgs/[orgId]/repos/[...path]/route.ts",
+        "api"
+      );
+      expect(toBunRoutePath(route)).toBe("/api/orgs/:orgId/repos/*");
+    });
+  });
+
+  describe("routeToClientPath", () => {
+    test("preserves dynamic segments", () => {
+      const route = filePathToRoute("api/users/[id]/route.ts", "api");
+      expect(routeToClientPath(route)).toBe("/api/users/[id]");
+    });
+
+    test("preserves catch-all segments", () => {
+      const route = filePathToRoute("api/files/[...path]/route.ts", "api");
+      expect(routeToClientPath(route)).toBe("/api/files/[...path]");
+    });
+
+    test("preserves optional catch-all segments", () => {
+      const route = filePathToRoute("api/files/[[...path]]/route.ts", "api");
+      expect(routeToClientPath(route)).toBe("/api/files/[[...path]]");
     });
   });
 

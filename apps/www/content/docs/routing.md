@@ -41,6 +41,66 @@ export default function BlogPost({ params }: BlogPostProps) {
 }
 ```
 
+## Catch-All Routes
+
+Use `[...param]` to match one or more path segments (the "catch-all" syntax):
+
+```
+app/
+└── docs/
+    └── [...slug]/
+        └── page.tsx      -> /docs/* (e.g. /docs/guide/getting-started)
+```
+
+The parameter is an **array** of the matched segments:
+
+```tsx
+interface DocsProps {
+  params: { slug: string[] };
+}
+
+export default function Docs({ params }: DocsProps) {
+  return <h1>Docs: {params.slug.join(" / ")}</h1>;
+}
+```
+
+Use `[[...param]]` to match **zero or more** segments, so the parent path also matches:
+
+```
+app/
+└── docs/
+    └── [[...slug]]/
+        └── page.tsx      -> /docs AND /docs/guide/getting-started
+```
+
+With an optional catch-all, `params.slug` is an empty array (`[]`) when the path has no remaining segments.
+
+Catch-all routes work for pages, API routes, and WebSockets. For API routes, validate the array with a schema:
+
+```typescript
+// app/api/files/[...path]/route.ts
+import { route } from "@axi/core";
+import { z } from "zod";
+
+const Params = z.object({ path: z.array(z.string()) });
+
+export const getFile = route
+  .get()
+  .params(Params)
+  .handle(({ params }) => ({
+    path: params.path, // string[]
+  }));
+```
+
+The generated client accepts an array for the catch-all param:
+
+```tsx
+const { data } = api.files.getFile.useQuery({ path: ["assets", "logo.png"] });
+// fetches /api/files/assets/logo.png
+```
+
+> A catch-all segment is intended to be the last segment of a route.
+
 ## Nested Routes
 
 Create nested routes by nesting directories:
@@ -85,6 +145,7 @@ Use regular anchor tags for navigation:
 When multiple routes could match a URL, Axi uses this priority:
 
 1. Static routes (exact matches)
-2. Dynamic routes (with parameters)
+2. Dynamic routes (with single parameters)
+3. Catch-all routes (`[...param]`)
 
-More specific routes always take precedence over less specific ones.
+More specific routes always take precedence over less specific ones. For example, with both `blog/[slug]/page.tsx` and `blog/[...rest]/page.tsx`, the single-parameter route handles `/blog/my-post` while the catch-all handles `/blog/a/b/c`.

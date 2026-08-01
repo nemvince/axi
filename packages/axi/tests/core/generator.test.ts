@@ -382,6 +382,36 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
       }
     });
 
+    test("generates API client for catch-all route", async () => {
+      // Create catch-all API route
+      await mkdir(join(APP_DIR, "api", "files", "[...path]"), { recursive: true });
+      await writeFile(
+        join(APP_DIR, "api", "files", "[...path]", "route.ts"),
+        createRouteContent(["GET"])
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(TEST_DIR);
+
+      try {
+        await generateApiClient(APP_DIR);
+
+        const apiClientFile = Bun.file(join(AXI_DIR, "api-client.ts"));
+        const apiClientContent = await apiClientFile.text();
+
+        // Path should keep the [...path] token for client substitution
+        expect(apiClientContent).toContain('"/api/files/[...path]"');
+        // Catch-all param should be recognized as a param key
+        expect(apiClientContent).toMatch(
+          /createApiMethod<.*>\("GET", "\/api\/files\/\[\.\.\.path\]", \["path"\]\)/
+        );
+        // Should not nest a dynamic key in the api object
+        expect(apiClientContent).toContain("files: {");
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
     test("generates type aliases for typed API routes", async () => {
       // Create typed API route using route builder
       await mkdir(join(APP_DIR, "api", "users"), { recursive: true });

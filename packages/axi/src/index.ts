@@ -26,7 +26,7 @@ export {
 export type { BuildMetadata } from "./core/build";
 
 export type {
-    AxiRequest, LayoutModule, LoaderContext, MiddlewareContext, MiddlewareModule, MiddlewareResult, OpenGraphImage, OpenGraphMetadata, PageMetadata, PageModule, PageProps, Route,
+    AxiRequest, LayoutModule, LayoutProps, LoaderContext, MiddlewareContext, MiddlewareModule, MiddlewareResult, OpenGraphImage, OpenGraphMetadata, PageMetadata, PageModule, PageProps, Route,
     RouteMatch, SSEResponse, StreamingResponse, TwitterMetadata
 } from "./core/types";
 

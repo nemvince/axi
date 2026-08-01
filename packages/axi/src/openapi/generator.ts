@@ -127,15 +127,26 @@ function inferTags(path: string): string[] {
 }
 
 function toOpenAPIPath(routePath: string): string {
-  return routePath.replace(/\[([^\]]+)\]/g, "{$1}");
+  return routePath.replace(
+    /\[\[\.\.\.([^\]]+)\]\]|\[\.\.\.([^\]]+)\]|\[([^\]]+)\]/g,
+    (_, a?: string, b?: string, c?: string) => `{${a || b || c}}`
+  );
 }
 
 function extractPathParams(
   routePath: string,
   paramsSchema?: unknown
 ): Parameter[] {
-  const matches = routePath.match(/\[([^\]]+)\]/g) || [];
-  const paramNames = matches.map((m) => m.slice(1, -1));
+  const matches =
+    routePath.match(/\[\[\.\.\.([^\]]+)\]\]|\[\.\.\.([^\]]+)\]|\[([^\]]+)\]/g) ||
+    [];
+  const paramNames = matches.map((m) => {
+    const optionalCatchall = m.match(/^\[\[\.\.\.([^\]]+)\]\]$/);
+    if (optionalCatchall) return optionalCatchall[1]!;
+    const catchall = m.match(/^\[\.\.\.([^\]]+)\]$/);
+    if (catchall) return catchall[1]!;
+    return m.slice(1, -1);
+  });
 
   const paramsJsonSchema =
     paramsSchema && isZodSchema(paramsSchema)

@@ -97,6 +97,35 @@ describe("scanner", () => {
       expect(routes[0]?.paramNames).toEqual(["slug"]);
     });
 
+    test("finds catch-all routes", async () => {
+      await mkdir(join(tempDir, "blog", "[...slug]"), { recursive: true });
+      await writeFile(
+        join(tempDir, "blog", "[...slug]", "page.tsx"),
+        "export default () => null"
+      );
+
+      const routes = await scanPageRoutes(tempDir);
+
+      expect(routes.length).toBe(1);
+      expect(routes[0]?.filepath).toBe("blog/[...slug]/page.tsx");
+      expect(routes[0]?.paramNames).toEqual(["slug"]);
+      expect(routes[0]?.catchallNames).toEqual(["slug"]);
+    });
+
+    test("finds optional catch-all routes", async () => {
+      await mkdir(join(tempDir, "blog", "[[...slug]]"), { recursive: true });
+      await writeFile(
+        join(tempDir, "blog", "[[...slug]]", "page.tsx"),
+        "export default () => null"
+      );
+
+      const routes = await scanPageRoutes(tempDir);
+
+      expect(routes.length).toBe(1);
+      expect(routes[0]?.filepath).toBe("blog/[[...slug]]/page.tsx");
+      expect(routes[0]?.catchallNames).toEqual(["slug"]);
+    });
+
     test("excludes api directory", async () => {
       await mkdir(join(tempDir, "api", "users"), { recursive: true });
       await writeFile(
@@ -177,6 +206,21 @@ describe("scanner", () => {
       expect(routes.length).toBe(1);
       expect(routes[0]?.filepath).toBe("api/users/[id]/route.ts");
       expect(routes[0]?.paramNames).toEqual(["id"]);
+    });
+
+    test("finds catch-all API routes", async () => {
+      const apiDir = join(tempDir, "api");
+      await mkdir(join(apiDir, "files", "[...path]"), { recursive: true });
+      await writeFile(
+        join(apiDir, "files", "[...path]", "route.ts"),
+        "export const GET = () => {}"
+      );
+
+      const routes = await scanApiRoutes(tempDir);
+
+      expect(routes.length).toBe(1);
+      expect(routes[0]?.filepath).toBe("api/files/[...path]/route.ts");
+      expect(routes[0]?.catchallNames).toEqual(["path"]);
     });
 
     test("finds multiple API routes", async () => {
@@ -262,6 +306,20 @@ describe("scanner", () => {
 
       expect(routes.length).toBe(1);
       expect(routes[0]?.paramNames).toEqual(["roomId"]);
+    });
+
+    test("finds catch-all ws routes", async () => {
+      const wsDir = join(tempDir, "ws");
+      await mkdir(join(wsDir, "chat", "[...room]"), { recursive: true });
+      await writeFile(
+        join(wsDir, "chat", "[...room]", "route.ts"),
+        "export const onOpen = () => {}"
+      );
+
+      const routes = await scanWsRoutes(wsDir);
+
+      expect(routes.length).toBe(1);
+      expect(routes[0]?.catchallNames).toEqual(["room"]);
     });
 
     test("returns empty array when directory doesn't exist", async () => {

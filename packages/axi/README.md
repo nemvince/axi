@@ -59,6 +59,17 @@ export default function About() {
 
 → `http://localhost:3000/about`
 
+Catch-all segments match one or more path segments:
+
+```tsx
+// app/docs/[...slug]/page.tsx
+export default function Docs({ params }: { params: { slug: string[] } }) {
+  return <h1>{params.slug.join(" / ")}</h1>;
+}
+```
+
+→ `http://localhost:3000/docs/guide/getting-started`
+
 ### Type-safe APIs
 
 Define an API route with the route builder and get a fully typed client automatically.

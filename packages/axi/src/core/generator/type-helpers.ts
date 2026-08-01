@@ -7,10 +7,18 @@ export const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 /**
  * Extract param keys from path pattern
  * e.g., "/api/users/[id]/posts/[postId]" -> ["id", "postId"]
+ * e.g., "/api/files/[...slug]" -> ["slug"]
  */
 export function extractParamKeysFromPath(path: string): string[] {
-  const matches = path.match(/\[([^\]]+)\]/g) || [];
-  return matches.map((m) => m.slice(1, -1));
+  const matches =
+    path.match(/\[\[\.\.\.([^\]]+)\]\]|\[\.\.\.([^\]]+)\]|\[([^\]]+)\]/g) || [];
+  return matches.map((m) => {
+    const optionalCatchall = m.match(/^\[\[\.\.\.([^\]]+)\]\]$/);
+    if (optionalCatchall) return optionalCatchall[1]!;
+    const catchall = m.match(/^\[\.\.\.([^\]]+)\]$/);
+    if (catchall) return catchall[1]!;
+    return m.slice(1, -1);
+  });
 }
 
 export interface ApiRouteMethodMeta {

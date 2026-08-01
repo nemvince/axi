@@ -9,6 +9,9 @@ services:
     environment:
       PORT: 3000
       NODE_ENV: production
+      # Optional analytics, loaded from apps/www/.env (gitignored)
+      UMAMI_URL: ${UMAMI_URL:-}
+      UMAMI_WEBSITE_ID: ${UMAMI_WEBSITE_ID:-}
 
   # --- Optional: automatic HTTPS via Caddy -------------------------------
   # 1. Point your domain's A record at this server.

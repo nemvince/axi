@@ -74,6 +74,27 @@ export const getUser = route.get().handle(async (ctx) => {
 });
 ```
 
+### Catch-All Routes
+
+Use `[...param]` to match one or more path segments:
+
+```typescript
+// app/api/files/[...path]/route.ts
+import { route } from "@axi-js/core";
+import { z } from "zod";
+
+const Params = z.object({ path: z.array(z.string()) });
+
+export const getFile = route
+  .get()
+  .params(Params)
+  .handle(({ params }) => ({
+    path: params.path, // string[]
+  }));
+```
+
+`[[...param]]` matches zero or more segments. The generated client accepts an array for the catch-all param, e.g. `api.files.getFile({ path: ["assets", "logo.png"] })`.
+
 ## Validation
 
 Add validation with Zod schemas:
