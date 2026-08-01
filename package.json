@@ -1,5 +1,5 @@
 {
-  "name": "axi",
+  "name": "axi-js",
   "private": true,
   "description": "axi — fullstack's flow state",
   "author": "Tamas Vince <nemvince@proton.me>",
@@ -23,8 +23,8 @@
     "@types/react-dom": "^19.2.4"
   },
   "scripts": {
-    "dev:basic": "bun run --filter @axi/basic-example dev",
-    "dev:www": "bun run --filter @axi/www dev",
+    "dev:basic": "bun run --filter @axi-js/basic-example dev",
+    "dev:www": "bun run --filter @axi-js/www dev",
     "typecheck": "bun run --filter '*' typecheck",
     "build": "bun run --filter '*' build"
   },
