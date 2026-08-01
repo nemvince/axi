@@ -2,7 +2,6 @@ import { Footer } from "@/components/footer";
 import { Navigation } from "@/components/navigation";
 import type { LayoutProps, PageMetadata } from "@axi-js/core";
 import { ThemeProvider } from "@axi-js/core/theme";
-import React from "react";
 import "./index.css";
 
 export const metadata: PageMetadata = {
@@ -26,7 +25,7 @@ export const metadata: PageMetadata = {
     siteName: "Axi",
     locale: "en_US",
     image: {
-      url: "/axi.png",
+      url: "/axi.webp",
       width: 1200,
       height: 630,
       alt: "Full-stack's flow state",
