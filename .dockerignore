@@ -1,0 +1,9 @@
+**/node_modules
+**/.axi
+.git
+*.tgz
+.playwright-mcp
+coverage
+.vscode
+.idea
+.DS_Store

@@ -38,4 +38,4 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/axi.config.ts ./axi.config.ts
 
 EXPOSE 3000
-CMD ["bun", "run", "start"]
+CMD ["bun", "run", "start", "--hostname", "0.0.0.0"]
