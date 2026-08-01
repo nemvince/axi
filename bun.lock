@@ -10,10 +10,10 @@
       },
     },
     "apps/www": {
-      "name": "@axi/www",
+      "name": "@axi-js/www",
       "version": "0.1.0",
       "dependencies": {
-        "@axi-js/core": "workspace:*",
+        "@axi-js/core": "^0.1.0",
         "@radix-ui/react-dialog": "^1.1.23",
         "@radix-ui/react-slot": "^1.3.3",
         "class-variance-authority": "^0.7.1",
@@ -39,7 +39,7 @@
       },
     },
     "examples/basic": {
-      "name": "@axi/basic-example",
+      "name": "@axi-js/basic-example",
       "version": "0.1.0",
       "dependencies": {
         "@axi-js/core": "workspace:*",
@@ -55,7 +55,7 @@
       },
     },
     "examples/with-tailwind": {
-      "name": "@axi/tailwind-example",
+      "name": "@axi-js/tailwind-example",
       "version": "0.1.0",
       "dependencies": {
         "@axi-js/core": "workspace:*",
@@ -101,7 +101,7 @@
     },
     "packages/create-axi": {
       "name": "create-axi",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "bin": {
         "create-axi": "./bin/cli.ts",
       },
@@ -126,13 +126,13 @@
     "typescript": "^7.0.2",
   },
   "packages": {
+    "@axi-js/basic-example": ["@axi-js/basic-example@workspace:examples/basic"],
+
     "@axi-js/core": ["@axi-js/core@workspace:packages/axi"],
 
-    "@axi/basic-example": ["@axi/basic-example@workspace:examples/basic"],
+    "@axi-js/tailwind-example": ["@axi-js/tailwind-example@workspace:examples/with-tailwind"],
 
-    "@axi/tailwind-example": ["@axi/tailwind-example@workspace:examples/with-tailwind"],
-
-    "@axi/www": ["@axi/www@workspace:apps/www"],
+    "@axi-js/www": ["@axi-js/www@workspace:apps/www"],
 
     "@babel/runtime": ["@babel/runtime@7.28.4", "", {}, "sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ=="],
 
