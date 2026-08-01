@@ -1,6 +1,7 @@
 import { CodeShowcase } from "@/components/code-showcase";
 import { FeaturesGrid } from "@/components/features-grid";
 import { FinalCta } from "@/components/final-cta";
+import { RoutePlayground } from "@/components/route-playground";
 import { Button } from "@/components/ui/button";
 import { StarIcon } from "@phosphor-icons/react";
 
@@ -61,6 +62,9 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Route Playground */}
+      <RoutePlayground />
 
       {/* Features Grid */}
       <FeaturesGrid />
