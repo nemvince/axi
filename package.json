@@ -1,6 +1,5 @@
 {
   "name": "axi",
-  "version": "0.2.0",
   "private": true,
   "description": "axi — fullstack's flow state",
   "author": "Tamas Vince <nemvince@proton.me>",

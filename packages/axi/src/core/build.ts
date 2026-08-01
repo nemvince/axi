@@ -5,6 +5,7 @@
 
 import { mkdir } from "node:fs/promises";
 import { join } from "path";
+import pkg from "../../package.json";
 import type { ResolvedAxiConfig } from "./config";
 import { generateApiClient, generateRoutesFile } from "./generator";
 import {
@@ -170,7 +171,7 @@ export async function buildForProduction(
   // Write build metadata
   const metadata: BuildMetadata = {
     timestamp: Date.now(),
-    version: "0.2.0", // Could read from package.json
+    version: pkg.version,
     routes: {
       pages: pageRoutes.length,
       apis: apiRoutes.length,

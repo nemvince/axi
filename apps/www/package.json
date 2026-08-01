@@ -31,7 +31,6 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "autoprefixer": "^10.5.4",
     "bun-plugin-tailwind": "^0.1.2",
-    "@axi/deploy": "workspace:*",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2"
   }

@@ -1,6 +1,6 @@
 {
   "name": "@axi/core",
-  "version": "0.3.10",
+  "version": "0.1.0",
   "description": "axi — fullstack's flow state",
   "author": "Tamas Vince <nemvince@proton.me>",
   "license": "MIT",

@@ -16,7 +16,7 @@ const terminalLines: TerminalLine[] = [
     text: "Ready in 4ms at http://localhost:3000",
   },
   { type: "comment", text: "# Deploy to production" },
-  { type: "command", text: "bunx @axi/deploy deploy production", prefix: "$" },
+  { type: "command", text: "docker compose up -d --build", prefix: "$" },
   {
     type: "output",
     text: "Deployment successful!",

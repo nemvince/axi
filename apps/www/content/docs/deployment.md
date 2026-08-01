@@ -5,238 +5,124 @@ order: 15
 category: Advanced
 ---
 
-The easiest way to deploy a Axi app is with `@axi/deploy` - a CLI tool that handles building, transferring, and starting your app on a VPS with automatic HTTPS.
+Axi apps are plain Bun servers, so deploying them is just: **build an image, run it, and reverse-proxy it to the internet**. The scaffolded templates (`bun create axi`) ship a `Dockerfile` and `docker-compose.yml` to get you started.
 
-## Installation
+## Quick start (Docker)
 
-```bash
-bun add -D @axi/deploy
-```
-
-## Quick Start
-
-### 1. Initialize configuration
+If you have a `Dockerfile` and `docker-compose.yml` (from a scaffolded template, or the ones below), this is all it takes:
 
 ```bash
-bunx @axi/deploy init
+docker compose up -d --build
 ```
 
-This creates `axi.deploy.ts`:
+Your app is now live at `http://<server>:3000`.
 
-```typescript
-import { defineDeployConfig } from "@axi/deploy";
+## What you get
 
-export default defineDeployConfig({
-  targets: {
-    production: {
-      host: "your-server.com",
-      username: "deploy",
-      privateKey: "~/.ssh/id_ed25519",
-      deployPath: "/var/www/myapp",
-      name: "myapp",
-      port: 3000,
+The template ships three files:
 
-      // Optional: Enable automatic HTTPS
-      domain: "myapp.com",
+| File                 | Purpose                                             |
+| -------------------- | --------------------------------------------------- |
+| `Dockerfile`         | Multi-stage build: install → `axi build` → slim runtime image |
+| `docker-compose.yml` | App service + optional Caddy sidecar for HTTPS      |
+| `Caddyfile`          | Reverse-proxy config used by the Caddy sidecar      |
 
-      env: {
-        NODE_ENV: "production",
-        DATABASE_URL: "${DATABASE_URL}", // Uses local env var
-      },
-    },
-  },
-});
-```
-
-### 2. Setup the server
-
-```bash
-bunx @axi/deploy setup production
-```
-
-This automatically installs Bun, PM2, and Caddy (if domain is configured) on your server.
-
-### 3. Deploy
-
-```bash
-bunx @axi/deploy deploy production
-```
-
-That's it! Your app is live with automatic HTTPS.
-
-## What happens during deploy
-
-1. Builds your app locally (`axi build`)
-2. Transfers files via rsync
-3. Installs dependencies on server
-4. Updates the symlink to the new release
-5. Restarts the app via PM2
-6. Configures Caddy reverse proxy (if domain is set)
-7. Runs health check
-
-## Commands
-
-| Command                           | Description                       |
-| --------------------------------- | --------------------------------- |
-| `@axi/deploy init`              | Create config file                |
-| `@axi/deploy setup [target]`    | Setup server with Bun, PM2, Caddy |
-| `@axi/deploy setup-git [target]`| Test git deployment access        |
-| `@axi/deploy deploy [target]`   | Deploy to target                  |
-| `@axi/deploy status [target]`   | Show deployment status            |
-| `@axi/deploy rollback [target]` | Rollback to previous release      |
-| `@axi/deploy logs [target]`     | View application logs             |
-| `@axi/deploy ssh [target]`      | Open SSH session                  |
-
-### Global options
-
-```bash
--c, --config <path>  Config file (default: axi.deploy.ts)
--y, --yes            Skip confirmation prompts
--V, --verbose        Verbose output
---dry-run            Preview without executing
-```
-
-### Deploy options
-
-```bash
-bunx @axi/deploy deploy production --no-build      # Skip local build
-bunx @axi/deploy deploy production --no-install    # Skip dependency install
-bunx @axi/deploy deploy production --no-restart    # Skip PM2 restart
-bunx @axi/deploy deploy production --dry-run       # Preview without executing
-bunx @axi/deploy deploy production -V              # Verbose output
-```
-
-### Logs options
-
-```bash
-bunx @axi/deploy logs production -f    # Follow logs in real-time
-```
-
-## Configuration Options
-
-```typescript
-interface DeployTarget {
-  // SSH Connection
-  host: string; // Server hostname or IP
-  sshPort?: number; // SSH port (default: 22)
-  username: string; // SSH username
-  privateKey: string; // Path to SSH private key
-  passphrase?: string; // Passphrase for an encrypted key
-
-  // Deployment
-  deployPath: string; // Where to deploy (e.g., /var/www/myapp)
-  name: string; // PM2 process name
-
-  // Application
-  port?: number; // App port (default: 3000)
-  script?: string; // Script to run (default: "start")
-  env?: Record<string, string>; // Environment variables
-
-  // HTTPS
-  domain?: string; // Domain for Caddy auto-HTTPS
-
-  // Options
-  keepReleases?: number; // Releases to keep (default: 5)
-  exclude?: string[]; // Files to exclude from transfer
-
-  // Git deployment (optional - uses git clone instead of rsync)
-  git?: {
-    repo: string; // Repository URL
-    branch?: string; // Branch to deploy (default: "main")
-    deployKey?: string; // Path to deploy key (SSH repos)
-    token?: string; // GitHub token (HTTPS repos, use "${GITHUB_TOKEN}")
-  };
-}
-```
-
-If your SSH key is encrypted, you'll be prompted for its passphrase. In non-interactive environments (CI/CD), set it via the `SSH_PASSPHRASE` environment variable or the `passphrase` config option:
-
-```bash
-SSH_PASSPHRASE="your-passphrase" bunx @axi/deploy deploy production
-```
-
-## Git Deployment
-
-Instead of rsync, you can deploy by cloning from a git repository:
-
-```typescript
-export default defineDeployConfig({
-  targets: {
-    production: {
-      // ... other config
-      git: {
-        repo: "https://github.com/user/myapp.git",
-        branch: "main",
-        token: "${GITHUB_TOKEN}", // For private repos
-      },
-    },
-  },
-});
-```
-
-Test your git setup:
-
-```bash
-bunx @axi/deploy setup-git production
-```
-
-## Server Directory Structure
-
-After deployment:
-
-```
-/var/www/myapp/
-├── current -> releases/20241203_143022/  # Symlink to active release
-├── releases/
-│   ├── 20241203_143022/                  # Current release
-│   └── 20241203_120000/                  # Previous (for rollback)
-├── shared/
-│   └── .env                              # Shared environment file
-├── logs/
-│   ├── output.log
-│   └── error.log
-└── ecosystem.config.js                   # PM2 configuration
-```
-
-## Requirements
-
-**Local machine:**
-
-- Bun
-- rsync
-- SSH key configured
-
-**Server:**
-
-- Ubuntu/Debian (for auto-install)
-- SSH access with key authentication
-- sudo access (for Caddy)
-
-## Alternative: Docker
-
-If you prefer Docker:
+The `Dockerfile` is a standard Bun multi-stage build:
 
 ```dockerfile
-FROM oven/bun:1
-
+FROM oven/bun:1 AS build
 WORKDIR /app
-COPY package.json bun.lock ./
+COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
+FROM oven/bun:1 AS deps
+WORKDIR /app
+COPY package.json bun.lock* ./
+RUN bun install --production --frozen-lockfile
+
+FROM oven/bun:1-slim
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/.axi ./.axi
+COPY --from=build /app/app ./app
+COPY --from=build /app/public ./public
+COPY --from=build /app/axi.config.ts ./axi.config.ts
 EXPOSE 3000
-CMD ["bun", "start"]
+CMD ["bun", "run", "start"]
 ```
+
+## Automatic HTTPS (Caddy)
+
+To serve your app over HTTPS with a Let's Encrypt certificate:
+
+1. Point your domain's **A record** at your server.
+2. Uncomment the `caddy` service in `docker-compose.yml` and set `DOMAIN`.
+3. Run:
 
 ```bash
-docker build -t my-axi-app .
-docker run -p 3000:3000 my-axi-app
+docker compose up -d
 ```
 
-## Health Checks
+Caddy terminates TLS on ports 80/443 and proxies to `app:3000`. It provisions and renews certificates automatically, so once DNS propagates your site is live at `https://your-domain.com`.
 
-Add a health check endpoint for monitoring:
+## Deploying to a VPS
+
+```bash
+# 1. Install Docker on the server
+curl -fsSL https://get.docker.com | sh
+
+# 2. Get the project onto the server (rsync, git clone, or scp)
+git clone https://github.com/you/my-app.git && cd my-app
+
+# 3. Build and run
+docker compose up -d --build
+```
+
+For updates, `git pull` (or re-transfer files) then run the same command — Compose only rebuilds changed layers and restarts the container with zero manual steps.
+
+To run **multiple apps** on one server, give each app a distinct host port (e.g. `"3001:3000"`) and let a shared Caddy (or nginx) route domains to each port.
+
+## Deploying to a PaaS
+
+Because the template includes a `Dockerfile`, it deploys to any container-based platform with no extra configuration:
+
+### Fly.io
+
+```bash
+fly launch    # detects the Dockerfile, creates fly.toml
+fly deploy
+```
+
+Axi binds to `PORT` from the environment, which is exactly how Fly routes traffic to your machine. Add a health check to `fly.toml`:
+
+```toml
+[[http_service.checks]]
+  path = "/api/health"
+  interval = "15s"
+```
+
+### Railway
+
+```bash
+railway init
+railway up
+```
+
+Railway detects the `Dockerfile` and builds it. Expose the app on port `3000`.
+
+### Cloud Run
+
+```bash
+gcloud run deploy my-app --source . --region us-central1 --allow-unauthenticated
+```
+
+Set the `PORT` env var to `8080` if you want Cloud Run's default; otherwise Axi uses `3000`.
+
+## Health checks
+
+Add a health endpoint so load balancers and uptime monitors can check your app:
 
 ```typescript
 // app/api/health/route.ts
@@ -246,3 +132,16 @@ export const healthCheck = route.get().handle(async () => {
   return { status: "ok", timestamp: Date.now() };
 });
 ```
+
+The health check is at `/api/health`; fall back to `/` if you don't define one.
+
+## Configuration
+
+- **Port**: Axi reads `PORT` from the environment first, then `axi.config.ts`, then defaults to `3000`. Set `PORT` in your `docker-compose.yml` or platform settings.
+- **Environment variables**: pass them via `environment:` in Compose, `fly secrets set`, or your platform's dashboard. Never commit `.env` files.
+- **Static assets**: anything in `public/` is served at the root (e.g. `public/robots.txt` → `/robots.txt`).
+
+## Requirements
+
+- Docker (locally or on the server) for the containerized flow
+- [Bun](https://bun.sh) >= 1.3.14 for local development

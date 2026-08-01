@@ -1,6 +1,6 @@
 {
   "name": "create-axi",
-  "version": "0.1.3",
+  "version": "1.0.0",
   "description": "Create a new Axi project with a single command",
   "author": "Tamas Vince",
   "license": "MIT",
