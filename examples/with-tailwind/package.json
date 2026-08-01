@@ -1,0 +1,36 @@
+{
+  "name": "@axi/tailwind-example",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Example app using Axi framework with Tailwind CSS",
+  "scripts": {
+    "dev": "axi dev",
+    "build": "axi build",
+    "start": "axi start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@axi/core": "workspace:*",
+    "@radix-ui/react-label": "^2.1.15",
+    "@radix-ui/react-separator": "^1.1.15",
+    "@radix-ui/react-slider": "^1.4.7",
+    "@radix-ui/react-slot": "^1.3.3",
+    "@radix-ui/react-switch": "^1.3.7",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "bun-plugin-tailwind": "^0.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "@phosphor-icons/react": "^2.1.10",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  }
+}

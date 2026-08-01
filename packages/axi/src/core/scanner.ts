@@ -1,0 +1,135 @@
+/**
+ * File scanner to discover routes
+ */
+
+import { join } from "path";
+import { filePathToRoute } from "./router";
+import type { Route } from "./types";
+
+const PAGE_PATTERNS = [
+  "**/page.tsx",
+  "**/page.ts",
+  "**/page.jsx",
+  "**/page.js",
+];
+const ROUTE_PATTERNS = [
+  "**/route.tsx",
+  "**/route.ts",
+  "**/route.jsx",
+  "**/route.js",
+];
+const LAYOUT_PATTERNS = [
+  "**/layout.tsx",
+  "**/layout.ts",
+  "**/layout.jsx",
+  "**/layout.js",
+];
+const MIDDLEWARE_PATTERNS = [
+  "**/middleware.tsx",
+  "**/middleware.ts",
+  "**/middleware.jsx",
+  "**/middleware.js",
+];
+
+/**
+ * Recursively scan directory for files matching patterns
+ */
+async function scanFiles(dir: string, patterns: string[]): Promise<string[]> {
+  const files: string[] = [];
+  try {
+    for (const pattern of patterns) {
+      const glob = new Bun.Glob(pattern);
+      const entries = await Array.fromAsync(glob.scan({ cwd: dir }));
+      files.push(...entries);
+    }
+  } catch {
+    // Directory doesn't exist, return empty array
+  }
+  return files;
+}
+
+/**
+ * Generic route scanner
+ */
+async function scanRoutes(
+  dir: string,
+  patterns: string[],
+  type: "page" | "api" | "ws",
+  pathPrefix?: string,
+  excludePrefixes?: string[]
+): Promise<Route[]> {
+  const files = await scanFiles(dir, patterns);
+  const routes: Route[] = [];
+
+  for (const file of files) {
+    // Check exclusions
+    if (excludePrefixes?.some((prefix) => file.startsWith(prefix))) {
+      continue;
+    }
+
+    const filepath = pathPrefix ? `${pathPrefix}/${file}` : file;
+    routes.push(filePathToRoute(filepath, type));
+  }
+
+  return routes;
+}
+
+/**
+ * Scan for page routes in app/ directory
+ */
+export async function scanPageRoutes(appDir: string): Promise<Route[]> {
+  return scanRoutes(appDir, PAGE_PATTERNS, "page", undefined, ["api/", "ws/"]);
+}
+
+/**
+ * Scan for API routes in app/api/ directory
+ */
+export async function scanApiRoutes(appDir: string): Promise<Route[]> {
+  const apiDir = join(appDir, "api");
+  return scanRoutes(apiDir, ROUTE_PATTERNS, "api", "api");
+}
+
+/**
+ * Scan for WebSocket routes in ws/ directory
+ */
+export async function scanWsRoutes(wsDir: string): Promise<Route[]> {
+  return scanRoutes(wsDir, ROUTE_PATTERNS, "ws", "ws");
+}
+
+/**
+ * Scan for layout files
+ */
+export async function scanLayouts(
+  appDir: string
+): Promise<Map<string, string>> {
+  const layouts = new Map<string, string>();
+  const files = await scanFiles(appDir, LAYOUT_PATTERNS);
+
+  for (const file of files) {
+    const dir = file.replace(/\/?layout\.(tsx|ts|jsx|js)$/, "");
+    const routePath =
+      dir === "" || dir === "/" ? "/" : `/${dir.replace(/^app\/?/, "")}`;
+    layouts.set(routePath, file);
+  }
+
+  return layouts;
+}
+
+/**
+ * Scan for middleware files
+ */
+export async function scanMiddleware(
+  appDir: string
+): Promise<Map<string, string>> {
+  const middleware = new Map<string, string>();
+  const files = await scanFiles(appDir, MIDDLEWARE_PATTERNS);
+
+  for (const file of files) {
+    const dir = file.replace(/\/?middleware\.(tsx|ts|jsx|js)$/, "");
+    const routePath =
+      dir === "" || dir === "/" ? "/" : `/${dir.replace(/^app\/?/, "")}`;
+    middleware.set(routePath, file);
+  }
+
+  return middleware;
+}

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.axi/
+!**/.axi/api-client.ts
+
+# Build output
+dist/
+build/
+*.log
+
+# Environment
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.playwright-mcp
+
+# Bun
+bun.lockb
+
+# Test coverage
+coverage/
+
+# Misc
+*.tmp
+*.temp
+
+plans/

@@ -1,0 +1,4 @@
+# Axi Public Directory Example
+User-agent: *
+Allow: /
+

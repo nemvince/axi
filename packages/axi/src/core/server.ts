@@ -1,0 +1,1294 @@
+/**
+ * Axi Server - Main server implementation
+ */
+
+import type { BunFile, Server } from "bun";
+import { join } from "path";
+import { openapi, type OpenAPIPlugin } from "../openapi";
+import {
+    getBuildMetadata,
+    hasBuildArtifacts,
+    type BuildMetadata,
+} from "./build";
+import type { ResolvedAxiConfig, ResolvedCorsConfig } from "./config";
+import { ApiError, ValidationError, errors } from "./errors";
+import { generateApiClient, generateRoutesFile } from "./generator";
+import {
+    getRequestUrl,
+    matchRoute,
+    sortRoutes,
+    toBunRoutePath,
+} from "./router";
+import {
+    scanApiRoutes,
+    scanLayouts,
+    scanMiddleware,
+    scanPageRoutes,
+    scanWsRoutes,
+} from "./scanner";
+import { WebSocketContextImpl } from "./server/contexts";
+import { getApplicableLayoutPaths } from "./shared";
+import { renderPage } from "./ssr";
+import type {
+    AxiRequest,
+    AxiServerConfig,
+    LayoutModule,
+    MiddlewareModule,
+    PageMetadata,
+    PageModule,
+    Route,
+    RouteHandler,
+    RouteHandlers,
+    ServerWebSocket,
+    WebSocketContext,
+    WebSocketData,
+    WsRouteModule,
+} from "./types";
+import {
+    createAssetLoaderPlugin,
+    dynamicImport,
+    fileExists,
+    findAllCssFiles,
+    generateHash,
+    getErrorMessage,
+    getFaviconContentType,
+    loadBunPlugins,
+    registerAssetPlugin,
+    resolveAbsolutePath,
+    transpileForBrowser,
+} from "./utils";
+import { mkdir, rename } from "node:fs/promises";
+import { createWatcher } from "./watcher";
+
+// Re-export types for external use
+export type {
+    AxiServerConfig, RouteHandler, ServerWebSocket,
+    WebSocketContext, WsRouteModule
+};
+
+/**
+ * Generate Cache-Control header value based on environment
+ */
+function getCacheControl(development: boolean, maxAge: number = 3600): string {
+  return development ? "no-cache" : `public, max-age=${maxAge}`;
+}
+
+/**
+ * Generate ETag from file metadata
+ */
+function generateETag(file: BunFile): string {
+  return `"${file.size}-${file.lastModified}"`;
+}
+
+/**
+ * Extract topic name from route filepath
+ * Examples:
+ *   sockets/chat/route.ts -> sockets/chat
+ *   ws/notifications/route.ts -> ws/notifications
+ */
+function getTopicFromRoute(filepath: string): string {
+  return filepath.replace(/\/route\.(tsx?|jsx?)$/, "");
+}
+
+/**
+ * Check if origin is allowed by CORS config
+ */
+function isOriginAllowed(
+  origin: string,
+  allowed: ResolvedCorsConfig["origin"]
+): boolean {
+  if (allowed === "*") return true;
+  if (typeof allowed === "string") return allowed === origin;
+  if (Array.isArray(allowed)) return allowed.includes(origin);
+  if (typeof allowed === "function") return allowed(origin);
+  return false;
+}
+
+/**
+ * Build CORS headers based on config and request
+ */
+function buildCorsHeaders(
+  req: Request,
+  config: ResolvedCorsConfig,
+  isPreflight: boolean
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const requestOrigin = req.headers.get("origin");
+
+  // Determine Access-Control-Allow-Origin
+  if (requestOrigin && isOriginAllowed(requestOrigin, config.origin)) {
+    // When credentials are enabled, must echo specific origin (not *)
+    headers["Access-Control-Allow-Origin"] =
+      config.origin === "*" && !config.credentials ? "*" : requestOrigin;
+  } else if (config.origin === "*" && !config.credentials) {
+    headers["Access-Control-Allow-Origin"] = "*";
+  }
+
+  // Credentials
+  if (config.credentials) {
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+
+  // Exposed headers (for actual requests, not preflight)
+  if (!isPreflight && config.exposedHeaders.length > 0) {
+    headers["Access-Control-Expose-Headers"] = config.exposedHeaders.join(", ");
+  }
+
+  // Preflight-specific headers
+  if (isPreflight) {
+    headers["Access-Control-Allow-Methods"] = config.methods.join(", ");
+    headers["Access-Control-Allow-Headers"] = config.allowedHeaders.join(", ");
+    headers["Access-Control-Max-Age"] = String(config.maxAge);
+  }
+
+  return headers;
+}
+
+/**
+ * Add CORS headers to an existing Response
+ */
+function addCorsHeaders(
+  response: Response,
+  req: Request,
+  config: ResolvedCorsConfig
+): Response {
+  const corsHeaders = buildCorsHeaders(req, config, false);
+  if (Object.keys(corsHeaders).length === 0) {
+    return response;
+  }
+
+  const newHeaders = new Headers(response.headers);
+  for (const [key, value] of Object.entries(corsHeaders)) {
+    newHeaders.set(key, value);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
+}
+
+class AxiServer {
+  private config: ResolvedAxiConfig;
+  private pageRoutes: Route[] = [];
+  private apiRoutes: Route[] = [];
+  private wsRoutes: Route[] = [];
+  private layouts: Map<string, string> = new Map();
+  private middleware: Map<string, string> = new Map();
+  private wsHandlers: Map<string, WsRouteModule> = new Map();
+  private rootLayoutPath: string | null = null;
+  private cachedMetadata: PageMetadata | null = null;
+  private hmrClients: Set<ServerWebSocket> = new Set();
+  private watcher: { close: () => void } | null = null;
+  private server: Server<WebSocketData> | null = null;
+  private buildMetadata: BuildMetadata | null = null;
+  private openapiPlugin: OpenAPIPlugin | null = null;
+
+  constructor(config: ResolvedAxiConfig) {
+    this.config = config;
+
+    // Initialize OpenAPI plugin if configured
+    if (config.openapi) {
+      this.openapiPlugin = openapi(config.openapi);
+    }
+  }
+
+  /**
+   * Initialize the server by scanning routes
+   */
+  async init(): Promise<{ readyMessage: string }> {
+    const startTime = Date.now();
+
+    // Register asset plugin for runtime imports (SSR)
+    // Must be called before any page/layout modules are imported
+    registerAssetPlugin();
+
+    // Scan all route types
+    this.pageRoutes = sortRoutes(await scanPageRoutes(this.config.appDir));
+    this.apiRoutes = sortRoutes(await scanApiRoutes(this.config.appDir));
+    this.wsRoutes = sortRoutes(await scanWsRoutes(this.config.wsDir));
+
+    this.layouts = await scanLayouts(this.config.appDir);
+    this.middleware = await scanMiddleware(this.config.appDir);
+
+    // Check for pre-built artifacts in production
+    const useBuildArtifacts =
+      !this.config.development && (await hasBuildArtifacts());
+
+    if (useBuildArtifacts) {
+      this.buildMetadata = await getBuildMetadata();
+      if (this.buildMetadata) {
+        console.log(
+          ` ○ Using pre-built artifacts (${this.buildMetadata.routes.pages} pages, ${this.buildMetadata.routes.apis} APIs)`
+        );
+      }
+    } else {
+      // Generate routes file for client-side hydration
+      await generateRoutesFile(this.config.appDir);
+
+      // Generate typed API client
+      await generateApiClient(this.config.appDir, this.config);
+    }
+
+    // Load WebSocket handlers in production
+    if (!this.config.development) {
+      for (const route of this.wsRoutes) {
+        const path = join(this.config.wsDir, route.filepath);
+        const handler = await dynamicImport<WsRouteModule>(
+          resolveAbsolutePath(path),
+          false
+        );
+        this.wsHandlers.set(route.filepath, handler);
+      }
+    }
+
+    // Load and cache metadata from root layout
+    if (this.layouts.has("/")) {
+      this.rootLayoutPath = join(this.config.appDir, this.layouts.get("/")!);
+      this.cachedMetadata = await this.loadMetadata();
+    }
+
+    const duration = Date.now() - startTime;
+    const totalRoutes =
+      this.pageRoutes.length + this.apiRoutes.length + this.wsRoutes.length;
+
+    const readyMessage =
+      totalRoutes > 0
+        ? ` ✓ Ready in ${duration}ms (${totalRoutes} routes)`
+        : ` ✓ Ready in ${duration}ms`;
+
+    // Set up file watcher in development mode
+    if (this.config.development) {
+      this.watcher = createWatcher({
+        rootDir: process.cwd(),
+        onChange: () => this.handleFileChange(),
+      });
+    }
+
+    return { readyMessage };
+  }
+
+  /**
+   * Get the current build metadata (for HTML generation with hashed URLs)
+   */
+  public getBuildMetadata(): BuildMetadata | null {
+    return this.buildMetadata;
+  }
+
+  /**
+   * Handle file changes in development mode
+   */
+  private async handleFileChange() {
+    const startTime = Date.now();
+    console.log(" ○ Reloading...");
+
+    // Send reload message to all connected HMR clients
+    if (this.hmrClients.size > 0) {
+      for (const client of this.hmrClients) {
+        try {
+          client.send(JSON.stringify({ type: "reload" }));
+        } catch (error) {
+          // Client might have disconnected
+          this.hmrClients.delete(client);
+        }
+      }
+
+      // Small delay to ensure clients receive the message
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(` ✓ Reloaded in ${duration}ms`);
+  }
+
+  /**
+   * Load a module for SSR in development.
+   *
+   * In dev, modules are freshly bundled with Bun.build (reading from disk)
+   * instead of natively imported, because Bun caches transitive imports
+   * in-process — native imports would keep serving stale components after an
+   * edit, causing SSR/client hydration mismatches. The bundle keeps node
+   * packages external so shared framework/react instances are reused.
+   */
+  private async loadServerModule<T>(path: string): Promise<T> {
+    if (!this.config.development) {
+      return dynamicImport<T>(path, false);
+    }
+
+    const result = await Bun.build({
+      entrypoints: [path],
+      target: "bun",
+      format: "esm",
+      packages: "external",
+      plugins: [createAssetLoaderPlugin()],
+    });
+
+    const output = result.outputs[0];
+    if (!result.success || !output) {
+      console.error(
+        `Failed to bundle module for dev reload: ${path}`,
+        result.logs
+      );
+      return dynamicImport<T>(path, true);
+    }
+
+    const devDir = join(process.cwd(), ".axi", "dev");
+    await mkdir(devDir, { recursive: true });
+    const outPath = join(devDir, `${generateHash(path)}.js`);
+    const tmpPath = `${outPath}.${process.pid}.tmp`;
+    await Bun.write(tmpPath, await output.text());
+    await rename(tmpPath, outPath);
+
+    return import(`${outPath}?t=${Date.now()}`);
+  }
+
+  /**
+   * Load metadata from root layout
+   */
+  private async loadMetadata(): Promise<PageMetadata> {
+    if (!this.rootLayoutPath) {
+      return {};
+    }
+
+    try {
+      const layoutModule = await this.loadServerModule<LayoutModule>(
+        this.rootLayoutPath
+      );
+      return layoutModule.metadata || {};
+    } catch (error) {
+      if (this.config.development) {
+        console.warn(
+          `Could not load metadata from root layout: ${getErrorMessage(error)}`
+        );
+      }
+      return {};
+    }
+  }
+
+  /**
+   * Build assets route for serving imported images, fonts, etc.
+   */
+  private buildAssetsRoute(): RouteHandlers {
+    return {
+      GET: async (req: Request) => {
+        const url = getRequestUrl(req);
+        const assetPath = url.pathname.replace("/__axi/assets/", "");
+        const file = Bun.file(
+          join(process.cwd(), ".axi", "assets", assetPath)
+        );
+
+        if (await file.exists()) {
+          return new Response(file, {
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+              "Cache-Control": getCacheControl(
+                this.config.development,
+                31536000
+              ), // 1 year for hashed assets
+            },
+          });
+        }
+
+        return new Response("Asset not found", { status: 404 });
+      },
+    };
+  }
+
+  /**
+   * Build client script route
+   */
+  private buildClientRoute(): RouteHandlers {
+    return {
+      GET: async () => {
+        const axiDir = join(process.cwd(), ".axi");
+        const clientJsPath = join(axiDir, "client.js");
+
+        // In production, try to serve pre-built client.js first
+        if (!this.config.development && (await fileExists(clientJsPath))) {
+          return new Response(Bun.file(clientJsPath), {
+            headers: {
+              "Content-Type": "application/javascript",
+              "Cache-Control": getCacheControl(false),
+            },
+          });
+        }
+
+        // Development or no pre-built bundle: transpile on-demand
+        const entryPath = join(axiDir, "entry.ts");
+
+        if (!(await fileExists(entryPath))) {
+          console.error("Client entry point not found at:", entryPath);
+          return new Response(
+            "Client script not found. Try restarting the server.",
+            { status: 404 }
+          );
+        }
+
+        const result = await transpileForBrowser([entryPath], {
+          minify: !this.config.development,
+        });
+
+        if (result.success && result.output) {
+          return new Response(result.output, {
+            headers: {
+              "Content-Type": "application/javascript",
+              "Cache-Control": getCacheControl(this.config.development),
+            },
+          });
+        }
+
+        console.error("Failed to build client script:", result.logs);
+        return new Response("Failed to build client script", { status: 500 });
+      },
+    };
+  }
+
+  /**
+   * Build styles route
+   */
+  private buildStylesRoute(): RouteHandlers {
+    return {
+      GET: async () => {
+        // Gather all layout and page file paths to scan
+        const filesToScan: string[] = [];
+
+        // Add all layout files
+        for (const layoutPath of this.layouts.values()) {
+          filesToScan.push(join(this.config.appDir, layoutPath));
+        }
+
+        // Add all page files
+        for (const route of this.pageRoutes) {
+          filesToScan.push(join(this.config.appDir, route.filepath));
+        }
+
+        // Find all CSS files imported across layouts, pages, and their components
+        const cssFiles = await findAllCssFiles(filesToScan, this.config.appDir);
+
+        if (cssFiles.length === 0) {
+          return new Response("/* No CSS files found */", {
+            headers: { "Content-Type": "text/css" },
+          });
+        }
+
+        try {
+          const plugins = await loadBunPlugins();
+          const result = await Bun.build({
+            entrypoints: cssFiles,
+            minify: !this.config.development,
+            plugins: plugins.length ? plugins : undefined,
+          });
+
+          if (result.success && result.outputs.length > 0) {
+            // Combine all CSS outputs into a single response
+            const combinedCss = await Promise.all(
+              result.outputs.map((output) => output.text())
+            );
+
+            return new Response(combinedCss.join("\n"), {
+              headers: {
+                "Content-Type": "text/css",
+                "Cache-Control": getCacheControl(this.config.development),
+              },
+            });
+          }
+        } catch (error) {
+          console.error("CSS processing error:", error);
+        }
+
+        // Fallback: concatenate raw CSS files
+        const rawCss = await Promise.all(
+          cssFiles.map((file) => Bun.file(file).text())
+        );
+
+        return new Response(rawCss.join("\n"), {
+          headers: {
+            "Content-Type": "text/css",
+            "Cache-Control": getCacheControl(this.config.development),
+          },
+        });
+      },
+    };
+  }
+
+  /**
+   * Build a hashed asset route handler for production
+   * Serves pre-built file with 1-year immutable cache
+   */
+  private buildHashedAssetRoute(
+    filename: string,
+    contentType: string
+  ): RouteHandlers {
+    const filePath = join(process.cwd(), ".axi", filename);
+    return {
+      GET: () =>
+        new Response(Bun.file(filePath), {
+          headers: {
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        }),
+    };
+  }
+
+  /**
+   * Build favicon route
+   */
+  private buildFaviconRoute(): RouteHandlers {
+    return {
+      GET: async () => {
+        // In development, re-read the root layout metadata on every request so
+        // favicon changes apply without a server restart. The cached value is
+        // only used in production.
+        const metadata = this.config.development
+          ? await this.loadMetadata()
+          : this.cachedMetadata || {};
+
+        if (!metadata.favicon) {
+          return new Response("No favicon configured", { status: 404 });
+        }
+
+        const file = Bun.file(join(this.config.appDir, metadata.favicon));
+
+        if (await file.exists()) {
+          const contentType = getFaviconContentType(metadata.favicon);
+          return new Response(file, {
+            headers: {
+              "Content-Type": contentType,
+              "Cache-Control": getCacheControl(this.config.development, 86400),
+              // Ensure browsers don't treat SVG as HTML
+              "X-Content-Type-Options": "nosniff",
+            },
+          });
+        }
+
+        return new Response("Favicon not found", { status: 404 });
+      },
+    };
+  }
+
+  /**
+   * Extract API handlers from a route module by scanning for __method property
+   */
+  private extractApiHandlers(
+    module: Record<string, unknown>
+  ): Record<string, RouteHandler> {
+    const handlers: Record<string, RouteHandler> = {};
+
+    for (const [, value] of Object.entries(module)) {
+      if (
+        typeof value === "function" &&
+        "__method" in value &&
+        typeof (value as { __method: unknown }).__method === "string"
+      ) {
+        const method = (value as { __method: string }).__method;
+        handlers[method] = value as unknown as RouteHandler;
+      }
+    }
+
+    return handlers;
+  }
+
+  /**
+   * Handle API request with dynamic import in development
+   */
+  private async handleDynamicApi(
+    req: Request,
+    route: Route,
+    absolutePath: string,
+    method: string
+  ): Promise<Response> {
+    try {
+      const module = await dynamicImport<Record<string, unknown>>(
+        absolutePath,
+        true
+      );
+      const handlers = this.extractApiHandlers(module);
+      const handler = handlers[method];
+
+      if (!handler) {
+        return new Response("Method not found", { status: 404 });
+      }
+      return await this.handleApiMethod(req, route, handler);
+    } catch (error) {
+      // Handle known error types that might bubble up
+      if (error instanceof ValidationError) {
+        return error.toResponse();
+      }
+      if (error instanceof ApiError) {
+        return error.toResponse();
+      }
+      // Log module loading errors
+      console.error(
+        `Error loading API route ${method} ${toBunRoutePath(route)}:`,
+        error
+      );
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  }
+
+  /**
+   * Wrap an API handler with CORS support
+   */
+  private wrapWithCors(
+    handler: (req: Request) => Response | Promise<Response>
+  ): (req: Request) => Response | Promise<Response> {
+    if (!this.config.cors) return handler;
+
+    return async (req: Request) => {
+      const response = await handler(req);
+      return addCorsHeaders(response, req, this.config.cors!);
+    };
+  }
+
+  /**
+   * Create OPTIONS handler for CORS preflight
+   */
+  private createOptionsHandler(): (req: Request) => Response {
+    return (req: Request) => {
+      if (!this.config.cors) {
+        return new Response(null, { status: 204 });
+      }
+      const headers = buildCorsHeaders(req, this.config.cors, true);
+      return new Response(null, { status: 204, headers });
+    };
+  }
+
+  /**
+   * Build all routes (internal, API, and page routes)
+   */
+  private async buildRoutes(): Promise<Record<string, RouteHandlers>> {
+    const routes: Record<string, RouteHandlers> = {
+      // Axi internal routes (dev uses fixed names, prod uses hashed)
+      "/__axi/favicon": this.buildFaviconRoute(),
+      "/__axi/assets/:filename": this.buildAssetsRoute(),
+    };
+
+    // In production with build metadata, register hashed routes
+    if (!this.config.development && this.buildMetadata) {
+      const { clientHash, stylesHash } = this.buildMetadata;
+      if (clientHash) {
+        routes[`/__axi/client.${clientHash}.js`] =
+          this.buildHashedAssetRoute(
+            `client.${clientHash}.js`,
+            "application/javascript"
+          );
+      }
+      if (stylesHash) {
+        routes[`/__axi/styles.${stylesHash}.css`] =
+          this.buildHashedAssetRoute(`styles.${stylesHash}.css`, "text/css");
+      }
+    } else {
+      // Development mode: use fixed names with no-cache
+      routes["/__axi/client.js"] = this.buildClientRoute();
+      routes["/__axi/styles.css"] = this.buildStylesRoute();
+    }
+
+    // Build OpenAPI routes if configured
+    if (this.openapiPlugin) {
+      const openapiRoutes = this.openapiPlugin.getRoutes(this.config.appDir);
+      for (const route of openapiRoutes) {
+        routes[route.path] = {
+          GET: async () => route.handler(),
+        };
+      }
+    }
+
+    const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
+
+    // Build API routes
+    for (const route of this.apiRoutes) {
+      const routePath = toBunRoutePath(route);
+      const apiPath = join(this.config.appDir, route.filepath);
+      const absolutePath = resolveAbsolutePath(apiPath);
+
+      if (this.config.development) {
+        // Dynamic handlers for hot reload
+        const handlers: RouteHandlers = {
+          // Add OPTIONS handler for CORS preflight
+          OPTIONS: this.createOptionsHandler(),
+        };
+        for (const method of HTTP_METHODS) {
+          handlers[method] = this.wrapWithCors((req: Request) =>
+            this.handleDynamicApi(req, route, absolutePath, method)
+          );
+        }
+        routes[routePath] = handlers;
+      } else {
+        // Production: import once and build handlers for existing methods
+        try {
+          const module = await dynamicImport<Record<string, unknown>>(
+            absolutePath,
+            false
+          );
+          const apiHandlers = this.extractApiHandlers(module);
+          const handlers: RouteHandlers = {
+            // Add OPTIONS handler for CORS preflight
+            OPTIONS: this.createOptionsHandler(),
+          };
+
+          for (const method of HTTP_METHODS) {
+            const apiHandler = apiHandlers[method];
+            if (apiHandler) {
+              handlers[method] = this.wrapWithCors((req: Request) =>
+                this.handleApiMethod(req, route, apiHandler)
+              );
+            }
+          }
+
+          routes[routePath] = handlers;
+        } catch (error) {
+          console.error(`Failed to load API route: ${apiPath}`, error);
+        }
+      }
+    }
+
+    // Build SSR page routes (all pages are SSR'd)
+    for (const route of this.pageRoutes) {
+      const routePath = toBunRoutePath(route);
+      routes[routePath] = {
+        GET: (req: Request) => this.handlePageRequest(req, route),
+      };
+    }
+
+    // Add loader endpoint for client-side navigation
+    routes["/__axi/loader"] = {
+      POST: async (req: Request) => this.handleLoaderRequest(req),
+    };
+
+    return routes;
+  }
+
+  /**
+   * Parse request body based on Content-Type
+   */
+  private async parseRequestBody(req: Request): Promise<unknown> {
+    // Skip body parsing for methods that typically don't have bodies
+    if (
+      req.method === "GET" ||
+      req.method === "HEAD" ||
+      req.method === "OPTIONS"
+    ) {
+      return null;
+    }
+
+    // Check if there's actually a body to parse
+    if (!req.body) {
+      return null;
+    }
+
+    // Security: Check body size limit (default 1MB)
+    const maxBodySize = this.config.maxBodySize ?? 1024 * 1024;
+    const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
+    if (contentLength > maxBodySize) {
+      throw errors.payloadTooLarge(maxBodySize);
+    }
+
+    const contentType = req.headers.get("content-type") || "";
+
+    try {
+      if (contentType.includes("application/json")) {
+        const text = await req.text();
+        return text ? JSON.parse(text) : null;
+      } else if (contentType.includes("application/x-www-form-urlencoded")) {
+        const text = await req.text();
+        return text ? Object.fromEntries(new URLSearchParams(text)) : null;
+      } else if (contentType.includes("multipart/form-data")) {
+        const formData = await req.formData();
+        const result: Record<string, unknown> = {};
+        formData.forEach((value, key) => {
+          result[key] = value;
+        });
+        return result;
+      } else if (contentType.includes("text/")) {
+        return await req.text();
+      } else {
+        // For other content types, try JSON first, fallback to text
+        const text = await req.text();
+        if (!text) return null;
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to parse request body: ${getErrorMessage(error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Handle API method call
+   */
+  private async handleApiMethod(
+    req: Request,
+    route: Route,
+    handler: RouteHandler
+  ): Promise<Response> {
+    const match = matchRoute(req, route);
+    if (!match) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    // Create extended request object with params, query, and parsed body
+    const axiReq = Object.create(req, {
+      params: { value: match.params, writable: false, enumerable: true },
+      query: { value: match.query, writable: false, enumerable: true },
+      body: {
+        value: await this.parseRequestBody(req),
+        writable: false,
+        enumerable: true,
+      },
+    }) as AxiRequest;
+
+    try {
+      return await handler(axiReq);
+    } catch (error) {
+      // Handle known error types with proper responses
+      if (error instanceof ValidationError) {
+        return error.toResponse();
+      }
+      if (error instanceof ApiError) {
+        return error.toResponse();
+      }
+      // Log unknown errors and return generic 500
+      console.error(`API route error: ${getErrorMessage(error)}`);
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  }
+
+  /**
+   * Execute middleware for a given path
+   * Returns either a Response (to short-circuit) or accumulated context
+   */
+  private async executeMiddleware(
+    req: Request,
+    urlPath: string,
+    params: Record<string, string>,
+    query: Record<string, string>
+  ): Promise<{ response?: Response; context: Record<string, unknown> }> {
+    // Get applicable middleware paths (same logic as layouts)
+    const middlewarePaths = getApplicableLayoutPaths(urlPath);
+    const context: Record<string, unknown> = {};
+
+    // Execute middleware in REVERSE order (child to parent)
+    // This allows child middleware to override parent middleware
+    for (let i = middlewarePaths.length - 1; i >= 0; i--) {
+      const path = middlewarePaths[i];
+      if (!path) continue; // noUncheckedIndexedAccess safety
+
+      const middlewareFile = this.middleware.get(path);
+      if (middlewareFile) {
+        const middlewarePath = join(
+          this.config.appDir,
+          middlewareFile
+        );
+        const absolutePath = resolveAbsolutePath(middlewarePath);
+
+        try {
+          const middlewareModule = await dynamicImport<MiddlewareModule>(
+            absolutePath,
+            this.config.development
+          );
+
+          if (typeof middlewareModule.middleware === "function") {
+            const result = await middlewareModule.middleware({
+              request: req,
+              params,
+              query,
+              context,
+            });
+
+            // If middleware returns a Response, short-circuit
+            if (result instanceof Response) {
+              return { response: result, context };
+            }
+
+            // If middleware returns any value (including empty object),
+            // merge it into context and stop executing parent middleware
+            if (result !== undefined) {
+              if (result && typeof result === "object") {
+                Object.assign(context, result);
+              }
+              // Stop executing parent middleware - child middleware handled this path
+              return { context };
+            }
+
+            // If middleware returns undefined, continue to parent middleware
+          }
+        } catch (error) {
+          console.error(
+            `Middleware error at ${path}: ${getErrorMessage(error)}`
+          );
+          return {
+            response: new Response("Internal Server Error", { status: 500 }),
+            context,
+          };
+        }
+      }
+    }
+
+    return { context };
+  }
+
+  /**
+   * Handle SSR page request
+   */
+  private async handlePageRequest(
+    req: Request,
+    route: Route
+  ): Promise<Response> {
+    const pagePath = join(this.config.appDir, route.filepath);
+    const match = matchRoute(req, route);
+
+    if (!match) {
+      return new Response("Not Found", { status: 404 });
+    }
+
+    try {
+      const urlPath = getRequestUrl(req).pathname;
+
+      // Execute middleware before loading page
+      const middlewareResult = await this.executeMiddleware(
+        req,
+        urlPath,
+        match.params,
+        match.query
+      );
+
+      // If middleware returned a response, return it immediately
+      if (middlewareResult.response) {
+        return middlewareResult.response;
+      }
+
+      const absolutePagePath = resolveAbsolutePath(pagePath);
+      const pageModule = await this.loadServerModule<PageModule>(
+        absolutePagePath
+      );
+
+      // Execute loader if present, passing middleware context
+      let loaderData: unknown = undefined;
+      if (typeof pageModule.loader === "function") {
+        loaderData = await pageModule.loader({
+          params: match.params,
+          query: match.query,
+          context: middlewareResult.context,
+        });
+      }
+
+      // Find applicable layouts using shared utility
+      const layoutModules: LayoutModule[] = [];
+      const layoutPaths = getApplicableLayoutPaths(urlPath);
+
+      for (const path of layoutPaths) {
+        if (this.layouts.has(path)) {
+          const layoutPath = join(this.config.appDir, this.layouts.get(path)!);
+          const absoluteLayoutPath = resolveAbsolutePath(layoutPath);
+          layoutModules.push(
+            await this.loadServerModule<LayoutModule>(absoluteLayoutPath)
+          );
+        }
+      }
+
+      const stream = await renderPage(
+        pageModule,
+        layoutModules,
+        match.params,
+        match.query,
+        this.config.development,
+        urlPath,
+        this.buildMetadata
+          ? {
+              clientHash: this.buildMetadata.clientHash,
+              stylesHash: this.buildMetadata.stylesHash,
+            }
+          : undefined,
+        loaderData
+      );
+
+      return new Response(stream, {
+        headers: { "Content-Type": "text/html" },
+      });
+    } catch (error) {
+      const message = getErrorMessage(error);
+      console.error(`Page route error: ${message}`);
+      return new Response(`Error rendering page: ${message}`, { status: 500 });
+    }
+  }
+
+  /**
+   * Handle loader request for client-side navigation
+   */
+  private async handleLoaderRequest(req: Request): Promise<Response> {
+    try {
+      const body = await req.json() as {
+        pathname: string;
+        params: Record<string, string>;
+        query: Record<string, string>;
+      };
+
+      // Execute middleware first
+      const middlewareResult = await this.executeMiddleware(
+        req,
+        body.pathname,
+        body.params,
+        body.query
+      );
+
+      // If middleware returned a response (like a redirect), handle it
+      if (middlewareResult.response) {
+        // For redirects, extract the Location header and return it to client
+        if (
+          middlewareResult.response.status >= 300 &&
+          middlewareResult.response.status < 400
+        ) {
+          const location = middlewareResult.response.headers.get("Location");
+          return Response.json({ redirect: location });
+        }
+        // For other responses (401, 403, etc), return status and message
+        const text = await middlewareResult.response.text();
+        return Response.json(
+          { error: text || middlewareResult.response.statusText },
+          { status: middlewareResult.response.status }
+        );
+      }
+
+      // Find matching page route
+      const route = this.pageRoutes.find((r) => {
+        // Convert route pattern to check against pathname
+        const routePath = toBunRoutePath(r);
+        // Simple pattern matching - convert [param] to regex
+        const pattern = routePath.replace(/:([^/]+)/g, "[^/]+");
+        const regex = new RegExp(`^${pattern}$`);
+        return regex.test(body.pathname);
+      });
+
+      if (!route) {
+        return Response.json({ data: null });
+      }
+
+      const pagePath = join(this.config.appDir, route.filepath);
+      const absolutePagePath = resolveAbsolutePath(pagePath);
+      const pageModule = await dynamicImport<PageModule>(
+        absolutePagePath,
+        this.config.development
+      );
+
+      if (typeof pageModule.loader !== "function") {
+        return Response.json({ data: null });
+      }
+
+      const data = await pageModule.loader({
+        params: body.params,
+        query: body.query,
+        context: middlewareResult.context,
+      });
+
+      return Response.json({ data });
+    } catch (error) {
+      console.error(`Loader error: ${getErrorMessage(error)}`);
+      return Response.json({ data: null, error: getErrorMessage(error) }, { status: 500 });
+    }
+  }
+
+  /**
+   * Build Bun.serve() configuration object
+   */
+  async getServerConfig(): Promise<
+    AxiServerConfig & { readyMessage: string }
+  > {
+    const initResult = await this.init();
+
+    // Build routes
+    const routes = await this.buildRoutes();
+
+    // Fallback handler for client-rendered pages and public files
+    routes["/*"] = {
+      GET: async (req: Request) => {
+        const url = getRequestUrl(req);
+
+        // Serve public directory files first
+        if (
+          !url.pathname.startsWith("/__axi") &&
+          !url.pathname.startsWith("/api") &&
+          !url.pathname.startsWith("/ws")
+        ) {
+          const file = Bun.file(join(this.config.publicDir, url.pathname));
+
+          if (await file.exists()) {
+            const etag = generateETag(file);
+
+            // Check ETag for 304 response
+            if (req.headers.get("if-none-match") === etag) {
+              return new Response(null, {
+                status: 304,
+                headers: { ETag: etag },
+              });
+            }
+
+            const mimeType = file.type || "application/octet-stream";
+
+            const headers: Record<string, string> = {
+              "Cache-Control": getCacheControl(this.config.development),
+              ETag: etag,
+              "Content-Type": mimeType.startsWith("text/")
+                ? `${mimeType}; charset=utf-8`
+                : mimeType,
+            };
+
+            const compressibleTypes =
+              /^(text\/|application\/(json|javascript|xml)|image\/svg\+xml)/;
+            const acceptEncoding = req.headers.get("accept-encoding") || "";
+
+            if (
+              compressibleTypes.test(mimeType) &&
+              acceptEncoding.includes("gzip")
+            ) {
+              const content = await file.arrayBuffer();
+              const compressed = Bun.gzipSync(new Uint8Array(content));
+              headers["Content-Encoding"] = "gzip";
+              return new Response(compressed, { headers });
+            }
+
+            return new Response(file, { headers });
+          }
+        }
+
+        // No matching route found - return 404
+        return new Response("Not Found", {
+          status: 404,
+          headers: { "Content-Type": "text/plain" },
+        });
+      },
+    };
+
+    return {
+      port: this.config.port,
+      hostname: this.config.hostname,
+      routes,
+      readyMessage: initResult.readyMessage,
+
+      fetch: async (req: Request, server: Server<WebSocketData>) => {
+        // Store server reference on first call
+        if (!this.server) {
+          this.server = server;
+        }
+
+        const url = getRequestUrl(req);
+
+        // Handle HMR WebSocket in development mode
+        if (this.config.development && url.pathname === "/__axi/hmr") {
+          if (server.upgrade(req, { data: { type: "hmr" } })) {
+            return;
+          }
+          return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+
+        // Handle WebSocket routes
+        if (url.pathname.startsWith("/ws/")) {
+          return this.handleWebSocketUpgrade(req, server);
+        }
+
+        return new Response("Not Found", { status: 404 });
+      },
+
+      websocket: {
+        open: (ws: ServerWebSocket) => {
+          const data = ws.data as WebSocketData;
+
+          if (data.type === "hmr") {
+            this.hmrClients.add(ws);
+            return;
+          }
+
+          // WebSocket connection
+          ws.subscribe(data.topic);
+          data.handler.onOpen?.(ws, data.ctx);
+        },
+        message: (ws: ServerWebSocket, message: string | Buffer) => {
+          const data = ws.data as WebSocketData;
+
+          if (data.type === "hmr") return;
+
+          // WebSocket message
+          data.handler.onMessage?.(ws, message, data.ctx);
+        },
+        close: (ws: ServerWebSocket, code?: number, reason?: string) => {
+          const data = ws.data as WebSocketData;
+
+          if (data.type === "hmr") {
+            this.hmrClients.delete(ws);
+            return;
+          }
+
+          // WebSocket close
+          data.handler.onClose?.(ws, data.ctx, code, reason);
+        },
+      },
+
+      development: this.config.development && {
+        hmr: true,
+        console: true,
+      },
+    };
+  }
+
+  /**
+   * Handle WebSocket upgrade request
+   */
+  private async handleWebSocketUpgrade(
+    req: Request,
+    server: Server<WebSocketData>
+  ): Promise<Response | undefined> {
+    for (const route of this.wsRoutes) {
+      const match = matchRoute(req, route);
+      if (!match) continue;
+
+      const handler = this.config.development
+        ? await dynamicImport<WsRouteModule>(
+            resolveAbsolutePath(join(this.config.appDir, route.filepath)),
+            true
+          )
+        : this.wsHandlers.get(route.filepath);
+      if (!handler) continue;
+
+      const topic = getTopicFromRoute(route.filepath);
+
+      // Check for custom upgrade logic and capture any custom data
+      let customData: unknown = undefined;
+      if (handler.upgrade) {
+        const upgradeResult = await handler.upgrade(req);
+        if (upgradeResult === false) continue;
+        // If upgrade returns an object with data, extract it
+        if (upgradeResult && typeof upgradeResult === "object" && "data" in upgradeResult) {
+          customData = upgradeResult.data;
+        }
+      }
+
+      // Create context and upgrade connection
+      const ctx = new WebSocketContextImpl(topic, server);
+      const wsData: WebSocketData = {
+        type: "ws",
+        route: route.filepath,
+        topic,
+        handler,
+        ctx,
+        data: customData,
+      };
+
+      if (server.upgrade(req, { data: wsData })) return;
+    }
+
+    return new Response("WebSocket route not found", { status: 404 });
+  }
+}
+
+/**
+ * Build server configuration for Bun.serve()
+ */
+export async function buildServerConfig(config: ResolvedAxiConfig) {
+  const server = new AxiServer(config);
+  return await server.getServerConfig();
+}

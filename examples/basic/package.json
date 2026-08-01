@@ -1,0 +1,24 @@
+{
+  "name": "@axi/basic-example",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Basic example app using Axi framework",
+  "scripts": {
+    "dev": "axi dev",
+    "build": "axi build",
+    "start": "axi start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@axi/core": "workspace:*",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:"
+  }
+}
