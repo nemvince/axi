@@ -1,0 +1,33 @@
+services:
+  app:
+    build: .
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+
+  # --- Optional: automatic HTTPS via Caddy -------------------------------
+  # 1. Point your domain's A record at this server.
+  # 2. Set DOMAIN to your domain and uncomment this block.
+  # 3. Run: docker compose up -d
+  #
+  # caddy:
+  #   image: caddy:2-alpine
+  #   restart: always
+  #   depends_on:
+  #     - app
+  #   environment:
+  #     - DOMAIN=your-domain.com
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
+# volumes:
+#   caddy_data:
+#   caddy_config:

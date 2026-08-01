@@ -60,7 +60,7 @@ export async function fetchTemplate(
     await copyDirectory(resolve(localExamplesDir, exampleDir), destPath);
   } else {
     try {
-      await downloadTemplate(`${GITHUB_REPO}/examples/${exampleDir}`, {
+      await downloadTemplate(`github:${GITHUB_REPO}/examples/${exampleDir}`, {
         dir: destPath,
         force: false,
         silent: true,

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📦 Axi
+# 🐢 Axi
 
 Fullstack's flow state. A full-stack TypeScript framework built on [Bun](https://bun.sh). File-based routing, type-safe APIs, and real-time WebSockets.
 
