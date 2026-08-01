@@ -10,7 +10,7 @@ category: Advanced
 Create `axi.config.ts` in your project root. It's a plain object that you type with `AxiConfig` and export as the default:
 
 ```typescript
-import type { AxiConfig } from "@axi/core";
+import type { AxiConfig } from "@axi-js/core";
 
 const config: AxiConfig = {
   port: 3000,

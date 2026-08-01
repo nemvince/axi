@@ -2,7 +2,7 @@
  * Example SSE streaming route
  */
 
-import { route, sse, type SSEResponse } from "@axi/core";
+import { route, sse, type SSEResponse } from "@axi-js/core";
 
 export const streamTokens = route.get().handle((): SSEResponse<{ token: string }> => {
   return sse(async function* () {

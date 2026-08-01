@@ -16,7 +16,7 @@ bun add zod
 Validate request bodies:
 
 ```typescript
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 const createUserSchema = z.object({

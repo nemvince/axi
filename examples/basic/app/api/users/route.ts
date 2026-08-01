@@ -2,7 +2,7 @@
  * Example Users API Route for demonstrating useQuery
  */
 
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 // Simulate a simple in-memory database

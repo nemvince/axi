@@ -11,7 +11,7 @@ Create a `route.ts` file in the `app/api/` directory:
 
 ```typescript
 // app/api/hello/route.ts
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 
 export const hello = route.get().handle(async (ctx) => {
   return { message: "Hello, World!" };
@@ -28,7 +28,7 @@ Use method builders for different HTTP methods:
 
 ```typescript
 // app/api/users/route.ts
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 
 export const listUsers = route.get().handle(async (ctx) => {
   return { users: [] };
@@ -66,7 +66,7 @@ Use parameters in your API routes:
 
 ```typescript
 // app/api/users/[id]/route.ts
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 
 export const getUser = route.get().handle(async (ctx) => {
   const userId = ctx.params.id;
@@ -79,7 +79,7 @@ export const getUser = route.get().handle(async (ctx) => {
 Add validation with Zod schemas:
 
 ```typescript
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 const UserSchema = z.object({
@@ -101,7 +101,7 @@ export const createUser = route
 Add middleware to routes:
 
 ```typescript
-import { route, defineMiddleware } from "@axi/core";
+import { route, defineMiddleware } from "@axi-js/core";
 
 const auth = defineMiddleware(async (ctx) => {
   const token = ctx.headers.get("authorization");
@@ -125,7 +125,7 @@ export const getProfile = route
 Errors are automatically handled:
 
 ```typescript
-import { route, error } from "@axi/core";
+import { route, error } from "@axi-js/core";
 
 export const getUser = route.get().handle(async (ctx) => {
   if (!ctx.query.id) {

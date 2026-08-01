@@ -1,5 +1,5 @@
 {
-  "name": "@axi/tailwind-example",
+  "name": "@axi-js/tailwind-example",
   "version": "0.1.0",
   "private": true,
   "description": "Example app using Axi framework with Tailwind CSS",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@axi/core": "workspace:*",
+    "@axi-js/core": "workspace:*",
     "@radix-ui/react-label": "^2.1.15",
     "@radix-ui/react-separator": "^1.1.15",
     "@radix-ui/react-slider": "^1.4.7",

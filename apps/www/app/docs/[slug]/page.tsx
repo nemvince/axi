@@ -1,7 +1,7 @@
 import { DocsToc } from "@/components/docs-toc";
 import { MarkdownContent } from "@/components/markdown-content";
 import { extractHeadings } from "@/lib/toc";
-import type { LoaderContext, PageMetadata, PageProps } from "@axi/core";
+import type { LoaderContext, PageMetadata, PageProps } from "@axi-js/core";
 import { useMemo } from "react";
 
 // lib/docs reads the file system (path, gray-matter, Bun.file), so it must

@@ -2,7 +2,7 @@
  * API Route Examples using the new fluent route builder.
  */
 
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 // 1) Simple GET with typed query params

@@ -1,4 +1,4 @@
-import type { LoaderContext, PageMetadata, PageProps } from "@axi/core";
+import type { LoaderContext, PageMetadata, PageProps } from "@axi-js/core";
 
 export const metadata: PageMetadata = {
   title: "Data Loading Example",

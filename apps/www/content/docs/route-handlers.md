@@ -10,7 +10,7 @@ category: API Routes
 Create fully type-safe route handlers:
 
 ```typescript
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 
 interface User {
   id: string;
@@ -74,7 +74,7 @@ export const deleteUser = route.delete().handle(async (ctx) => {
 Return error responses:
 
 ```typescript
-import { route, error } from "@axi/core";
+import { route, error } from "@axi-js/core";
 
 export const getUser = route.get().handle(async (ctx) => {
   if (!ctx.query.id) {
@@ -129,7 +129,7 @@ export const downloadReport = route.get().handle(async (ctx) => {
 Handle multiple HTTP methods in one file:
 
 ```typescript
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 const UserSchema = z.object({

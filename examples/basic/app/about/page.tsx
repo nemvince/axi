@@ -2,7 +2,7 @@
  * About page - Client-side rendered by default
  */
 
-import { useRouter } from "@axi/core/client";
+import { useRouter } from "@axi-js/core/client";
 
 export default function About() {
   const { navigate } = useRouter();

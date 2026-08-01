@@ -28,7 +28,7 @@ This creates a page at `/about`.
 Pages receive `params`, `query`, and `data` as props:
 
 ```tsx
-import type { PageProps } from "@axi/core";
+import type { PageProps } from "@axi-js/core";
 
 export default function Page({ params, query, data }: PageProps) {
   return (
@@ -46,7 +46,7 @@ export default function Page({ params, query, data }: PageProps) {
 Use the `loader` export for server-side data fetching:
 
 ```tsx
-import type { LoaderContext, PageProps } from "@axi/core";
+import type { LoaderContext, PageProps } from "@axi-js/core";
 
 // Loader runs on the server
 export async function loader({ params, query }: LoaderContext) {
@@ -76,7 +76,7 @@ Loaders run:
 Export metadata for SEO:
 
 ```tsx
-import type { PageMetadata } from "@axi/core";
+import type { PageMetadata } from "@axi-js/core";
 
 export const metadata: PageMetadata = {
   title: "About Us",
@@ -114,7 +114,7 @@ Use loaders for initial data, React state for client interactions:
 
 ```tsx
 import { useState } from "react";
-import type { LoaderContext, PageProps } from "@axi/core";
+import type { LoaderContext, PageProps } from "@axi-js/core";
 
 export async function loader({ params }: LoaderContext) {
   const posts = await db.getPosts();

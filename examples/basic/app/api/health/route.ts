@@ -3,7 +3,7 @@
  * Ultra-minimal health check
  */
 
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 
 export const healthCheck = route.get().handle(() => ({
   status: "healthy",

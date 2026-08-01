@@ -14,7 +14,7 @@ Axi can automatically generate an [OpenAPI 3.1](https://spec.openapis.org/oas/v3
 Set `openapi.enabled` to `true` in `axi.config.ts`:
 
 ```typescript
-import type { AxiConfig } from "@axi/core";
+import type { AxiConfig } from "@axi-js/core";
 
 const config: AxiConfig = {
   openapi: {
@@ -62,7 +62,7 @@ The spec is built by scanning every `route.ts` file in `app/api/`:
 Use `.meta()` on a route to enrich its OpenAPI operation:
 
 ```typescript
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 const CreateUserSchema = z.object({

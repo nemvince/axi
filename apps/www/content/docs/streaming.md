@@ -11,7 +11,7 @@ Use the `stream()` function to create streaming responses:
 
 ```typescript
 // app/api/stream/route.ts
-import { route, stream, type StreamingResponse } from "@axi/core";
+import { route, stream, type StreamingResponse } from "@axi-js/core";
 
 export const streamText = route.get().handle((): StreamingResponse<string> => {
   return stream(async function* () {
@@ -31,7 +31,7 @@ For structured data streaming, use `sse()` which automatically formats messages:
 
 ```typescript
 // app/api/updates/route.ts
-import { route, sse, type SSEResponse } from "@axi/core";
+import { route, sse, type SSEResponse } from "@axi-js/core";
 
 interface Update {
   message: string;
@@ -180,7 +180,7 @@ return (
 
 ```typescript
 // Server
-import { route, sse, type SSEResponse } from "@axi/core";
+import { route, sse, type SSEResponse } from "@axi-js/core";
 import { z } from "zod";
 
 export const generateText = route

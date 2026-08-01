@@ -1,4 +1,4 @@
-import type { AxiConfig } from "@axi/core";
+import type { AxiConfig } from "@axi-js/core";
 
 const config: AxiConfig = {
   port: 3002,

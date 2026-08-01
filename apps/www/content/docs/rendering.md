@@ -73,7 +73,7 @@ export default function Counter() {
 Keep server-only code in `loader` functions:
 
 ```tsx
-import type { LoaderContext, PageProps } from "@axi/core";
+import type { LoaderContext, PageProps } from "@axi-js/core";
 
 // This only runs on the server
 export async function loader({ params }: LoaderContext) {
@@ -99,7 +99,7 @@ Unlike Next.js App Router, you don't need `"use client"` directives. Every compo
 
 ## Client-Only Code
 
-Client-side utilities live under the `@axi/core/client` entrypoint so browser bundles avoid server-only dependencies.
+Client-side utilities live under the `@axi-js/core/client` entrypoint so browser bundles avoid server-only dependencies.
 
 ### Browser APIs and Libraries
 
@@ -110,7 +110,7 @@ Some code can only run in the browser (Three.js, WebGL, `window`, `localStorage`
 The `useIsClient` hook uses React's `useSyncExternalStore` to detect whether code is running on the client. This is the official React pattern for avoiding hydration mismatches.
 
 ```tsx
-import { useIsClient } from "@axi/core/client";
+import { useIsClient } from "@axi-js/core/client";
 
 export default function BrowserOnly() {
   const isClient = useIsClient();
@@ -129,7 +129,7 @@ export default function BrowserOnly() {
 The `useClientEffect` hook is a convenience wrapper around `useEffect` that only runs on the client, eliminating the need for `typeof window` checks.
 
 ```tsx
-import { useClientEffect } from "@axi/core/client";
+import { useClientEffect } from "@axi-js/core/client";
 import * as THREE from "three";
 
 export default function ThreeScene() {
@@ -187,7 +187,7 @@ export default function App() {
 **localStorage:**
 
 ```tsx
-import { useClientEffect } from "@axi/core/client";
+import { useClientEffect } from "@axi-js/core/client";
 
 function useLocalStorage(key: string, initialValue: string) {
   const [value, setValue] = useState(initialValue);
@@ -208,7 +208,7 @@ function useLocalStorage(key: string, initialValue: string) {
 **Window size:**
 
 ```tsx
-import { useClientEffect } from "@axi/core/client";
+import { useClientEffect } from "@axi-js/core/client";
 
 function useWindowSize() {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -230,7 +230,7 @@ function useWindowSize() {
 **Media queries:**
 
 ```tsx
-import { useClientEffect } from "@axi/core/client";
+import { useClientEffect } from "@axi-js/core/client";
 
 function usePrefersColorScheme() {
   const [scheme, setScheme] = useState<"light" | "dark">("light");
@@ -280,7 +280,7 @@ When navigating between pages on the client:
 3. No full page reload - smooth SPA experience
 
 ```tsx
-import { useRouter } from "@axi/core/client";
+import { useRouter } from "@axi-js/core/client";
 
 export default function Navigation() {
   const { navigate, isNavigating } = useRouter();

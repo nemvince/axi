@@ -53,7 +53,7 @@ Query parameters are flattened into the options object:
 
 ```typescript
 // app/api/search/route.ts
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 export const search = route

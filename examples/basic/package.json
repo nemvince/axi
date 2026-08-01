@@ -1,5 +1,5 @@
 {
-  "name": "@axi/basic-example",
+  "name": "@axi-js/basic-example",
   "version": "0.1.0",
   "private": true,
   "description": "Basic example app using Axi framework",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@axi/core": "workspace:*",
+    "@axi-js/core": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "^4.4.3"

@@ -1,4 +1,4 @@
-import { redirect } from "@axi/core/client";
+import { redirect } from "@axi-js/core/client";
 
 export default function DocsPage() {
   // Redirect to the introduction page

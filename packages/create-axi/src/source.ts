@@ -117,7 +117,7 @@ async function postProcessPackageJson(destPath: string, projectName: string) {
     if (!deps) continue;
 
     for (const [dep, range] of Object.entries(deps)) {
-      if (dep === "@axi/core") {
+      if (dep === "@axi-js/core") {
         deps[dep] = await resolveAxiVersion();
       } else if (range === "catalog:") {
         const version = CATALOG[dep];
@@ -137,7 +137,7 @@ async function postProcessPackageJson(destPath: string, projectName: string) {
 async function resolveAxiVersion(): Promise<string> {
   try {
     const proc = Bun.spawn(
-      ["bun", "pm", "view", "@axi/core", "version"],
+      ["bun", "pm", "view", "@axi-js/core", "version"],
       { stdout: "pipe", stderr: "pipe" }
     );
     await proc.exited;

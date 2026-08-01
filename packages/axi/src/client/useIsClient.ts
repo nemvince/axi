@@ -9,7 +9,7 @@
  *
  * @example
  * ```tsx
- * import { useIsClient } from "@axi/core/client";
+ * import { useIsClient } from "@axi-js/core/client";
  *
  * function BrowserOnlyComponent() {
  *   const isClient = useIsClient();
@@ -26,7 +26,7 @@
  * @example
  * ```tsx
  * // With Three.js
- * import { useIsClient } from "@axi/core/client";
+ * import { useIsClient } from "@axi-js/core/client";
  * import * as THREE from "three";
  *
  * function ThreeScene() {

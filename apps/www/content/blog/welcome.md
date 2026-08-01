@@ -42,7 +42,7 @@ Real-time features shouldn't be difficult to add. Axi includes WebSocket support
 
 ```typescript
 // app/ws/chat/route.ts
-import type { ServerWebSocket, WebSocketContext } from "@axi/core";
+import type { ServerWebSocket, WebSocketContext } from "@axi-js/core";
 
 export function onMessage(
   ws: ServerWebSocket,

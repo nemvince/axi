@@ -10,7 +10,7 @@ category: API Routes
 Create a middleware function:
 
 ```typescript
-import { route, defineMiddleware } from "@axi/core";
+import { route, defineMiddleware } from "@axi-js/core";
 
 const logger = defineMiddleware((ctx) => {
   console.log(`${ctx.method} ${ctx.url}`);
@@ -28,7 +28,7 @@ export const getMessage = route
 Middleware is just a function receiving the route context. For full type inference, wrap it with `defineMiddleware` (it infers the context extras your middleware adds):
 
 ```typescript
-import { route, defineMiddleware } from "@axi/core";
+import { route, defineMiddleware } from "@axi-js/core";
 
 const withUser = defineMiddleware(async (ctx) => {
   return { user: await loadUser(ctx) };
@@ -46,7 +46,7 @@ A middleware can:
 Middleware can add data to the context:
 
 ```typescript
-import { route, defineMiddleware } from "@axi/core";
+import { route, defineMiddleware } from "@axi-js/core";
 
 const authMiddleware = defineMiddleware(async (ctx) => {
   const token = ctx.headers.get("authorization");
@@ -76,7 +76,7 @@ export const getCurrentUser = route
 Chain multiple middleware:
 
 ```typescript
-import { route, defineMiddleware } from "@axi/core";
+import { route, defineMiddleware } from "@axi-js/core";
 
 const auth = defineMiddleware(async (ctx) => {
   return { user: { id: "123" } };
@@ -104,8 +104,8 @@ export const getUserWithTiming = route
 Middleware short-circuits by returning a `Response`. For structured errors, use `ApiError` or the `errors` factory — they're converted to a proper error response automatically:
 
 ```typescript
-import { route, errors } from "@axi/core";
-import type { AxiRequest } from "@axi/core";
+import { route, errors } from "@axi-js/core";
+import type { AxiRequest } from "@axi-js/core";
 
 const requireAdmin = async (ctx: AxiRequest & { user?: { isAdmin?: boolean } }) => {
   if (!ctx.user?.isAdmin) {
@@ -129,7 +129,7 @@ export const deleteResource = route
 Middleware supports async operations:
 
 ```typescript
-import { route, defineMiddleware, errors } from "@axi/core";
+import { route, defineMiddleware, errors } from "@axi-js/core";
 
 const loadUser = defineMiddleware(async (ctx) => {
   const userId = ctx.params.id;
@@ -157,7 +157,7 @@ Create reusable middleware:
 
 ```typescript
 // middleware/auth.ts
-import { defineMiddleware, errors } from "@axi/core";
+import { defineMiddleware, errors } from "@axi-js/core";
 
 export const requireAuth = defineMiddleware(async (ctx) => {
   const token = ctx.headers.get("authorization");
@@ -171,7 +171,7 @@ export const requireAuth = defineMiddleware(async (ctx) => {
 });
 
 // middleware/rateLimit.ts
-import { defineMiddleware, errors } from "@axi/core";
+import { defineMiddleware, errors } from "@axi-js/core";
 
 const requestCounts = new Map<string, { count: number; resetAt: number }>();
 
@@ -213,7 +213,7 @@ export const getProtectedUser = route
 Apply middleware conditionally:
 
 ```typescript
-import { route, defineMiddleware } from "@axi/core";
+import { route, defineMiddleware } from "@axi-js/core";
 
 const optionalAuth = defineMiddleware(async (ctx) => {
   const token = ctx.headers.get("authorization");

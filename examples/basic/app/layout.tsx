@@ -1,4 +1,4 @@
-import type { PageMetadata } from "@axi/core";
+import type { PageMetadata } from "@axi-js/core";
 import React from "react";
 import "./index.css";
 

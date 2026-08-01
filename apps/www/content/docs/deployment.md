@@ -126,7 +126,7 @@ Add a health endpoint so load balancers and uptime monitors can check your app:
 
 ```typescript
 // app/api/health/route.ts
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 
 export const healthCheck = route.get().handle(async () => {
   return { status: "ok", timestamp: Date.now() };

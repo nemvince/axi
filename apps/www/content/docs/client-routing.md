@@ -14,7 +14,7 @@ Axi provides client-side routing hooks for programmatic navigation and accessing
 Access router state and navigation:
 
 ```tsx
-import { useRouter } from "@axi/core/client";
+import { useRouter } from "@axi-js/core/client";
 
 export default function Navigation() {
   const { pathname, navigate, params, isNavigating } = useRouter();
@@ -45,7 +45,7 @@ export default function Navigation() {
 Access route parameters:
 
 ```tsx
-import { useParams } from "@axi/core/client";
+import { useParams } from "@axi-js/core/client";
 
 export default function BlogPost() {
   const { slug } = useParams();
@@ -59,7 +59,7 @@ export default function BlogPost() {
 Navigate programmatically:
 
 ```tsx
-import { navigate } from "@axi/core/client";
+import { navigate } from "@axi-js/core/client";
 
 export default function Button() {
   const handleClick = () => {
@@ -84,7 +84,7 @@ Links are automatically intercepted for client-side navigation.
 ## Complete Example
 
 ```tsx
-import { useRouter, useParams } from "@axi/core/client";
+import { useRouter, useParams } from "@axi-js/core/client";
 
 export default function UserProfile() {
   const { id } = useParams();
@@ -118,7 +118,7 @@ Access dynamic route parameters:
 
 ```tsx
 // app/blog/[slug]/page.tsx
-import { useParams } from "@axi/core/client";
+import { useParams } from "@axi-js/core/client";
 
 export default function BlogPost() {
   const { slug } = useParams();
@@ -146,7 +146,7 @@ export default function SearchPage({
 Navigate programmatically:
 
 ```tsx
-import { navigate } from "@axi/core/client";
+import { navigate } from "@axi-js/core/client";
 
 async function handleSubmit() {
   // Process form
@@ -159,7 +159,7 @@ async function handleSubmit() {
 Show loading indicators during navigation:
 
 ```tsx
-import { useRouter } from "@axi/core/client";
+import { useRouter } from "@axi-js/core/client";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { isNavigating } = useRouter();

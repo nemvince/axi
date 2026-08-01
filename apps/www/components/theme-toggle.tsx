@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { useTheme } from "@axi/core/theme";
+import { useTheme } from "@axi-js/core/theme";
 import { MoonIcon, SunIcon } from "@phosphor-icons/react";
 
 export function ThemeToggle() {

@@ -15,8 +15,8 @@ Create a `middleware.ts` file to protect routes:
 
 ```typescript
 // app/middleware.ts
-import { redirect, getCookie } from "@axi/core";
-import type { MiddlewareContext } from "@axi/core";
+import { redirect, getCookie } from "@axi-js/core";
+import type { MiddlewareContext } from "@axi-js/core";
 
 export async function middleware({ request }: MiddlewareContext) {
   const authToken = getCookie(request, "auth_token");
@@ -39,7 +39,7 @@ This protects all routes. Unauthenticated users are redirected to `/auth/login`.
 Middleware data flows to loaders and pages:
 
 ```tsx
-import type { LoaderContext, PageProps } from "@axi/core";
+import type { LoaderContext, PageProps } from "@axi-js/core";
 
 export async function loader({ context }: LoaderContext) {
   // Access middleware data
@@ -74,8 +74,8 @@ Restrict routes by role:
 
 ```typescript
 // app/admin/middleware.ts
-import { redirect } from "@axi/core";
-import type { MiddlewareContext } from "@axi/core";
+import { redirect } from "@axi-js/core";
+import type { MiddlewareContext } from "@axi-js/core";
 
 export async function middleware({ context }: MiddlewareContext) {
   const user = context.user as { role: string };
@@ -104,8 +104,8 @@ This allows specific routes to override general protection.
 Built-in helpers for auth:
 
 ```typescript
-import { getCookie, setCookie, deleteCookie, redirect } from "@axi/core";
-import type { MiddlewareContext } from "@axi/core";
+import { getCookie, setCookie, deleteCookie, redirect } from "@axi-js/core";
+import type { MiddlewareContext } from "@axi-js/core";
 
 export async function middleware({ request }: MiddlewareContext) {
   // Get cookie
@@ -129,8 +129,8 @@ Authentication flow:
 
 ```typescript
 // app/middleware.ts - Protect all routes
-import { redirect, getCookie } from "@axi/core";
-import type { MiddlewareContext } from "@axi/core";
+import { redirect, getCookie } from "@axi-js/core";
+import type { MiddlewareContext } from "@axi-js/core";
 
 export async function middleware({ request }: MiddlewareContext) {
   const token = getCookie(request, "auth_token");
@@ -153,8 +153,8 @@ export async function middleware() {
 
 ```typescript
 // app/admin/middleware.ts - Require admin
-import { redirect } from "@axi/core";
-import type { MiddlewareContext } from "@axi/core";
+import { redirect } from "@axi-js/core";
+import type { MiddlewareContext } from "@axi-js/core";
 
 export async function middleware({ context }: MiddlewareContext) {
   if (context.user?.role !== "admin") {

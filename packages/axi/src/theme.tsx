@@ -7,14 +7,14 @@
  * Usage:
  * ```tsx
  * // In layout.tsx - just wrap with ThemeProvider
- * import { ThemeProvider } from "@axi/core/theme";
+ * import { ThemeProvider } from "@axi-js/core/theme";
  *
  * export default function Layout({ children }) {
  *   return <ThemeProvider>{children}</ThemeProvider>;
  * }
  *
  * // In any component
- * import { useTheme } from "@axi/core/theme";
+ * import { useTheme } from "@axi-js/core/theme";
  *
  * function ThemeToggle() {
  *   const { resolvedTheme, setTheme } = useTheme();

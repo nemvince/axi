@@ -11,7 +11,7 @@ Create a WebSocket route in `app/ws/`:
 
 ```typescript
 // app/ws/custom/route.ts
-import type { ServerWebSocket, WebSocketContext } from "@axi/core";
+import type { ServerWebSocket, WebSocketContext } from "@axi-js/core";
 
 export function onOpen(ws: ServerWebSocket, ctx: WebSocketContext) {
   console.log("WebSocket opened");
@@ -234,7 +234,7 @@ export function onMessage(ws: ServerWebSocket, message: string | Buffer, ctx: We
 
 ```typescript
 // app/ws/game/route.ts
-import type { ServerWebSocket, WebSocketContext } from "@axi/core";
+import type { ServerWebSocket, WebSocketContext } from "@axi-js/core";
 
 interface Player {
   id: string;

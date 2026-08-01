@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { useRouter } from "@axi/core/client";
+import { useRouter } from "@axi-js/core/client";
 
 interface NavItem {
   title: string;

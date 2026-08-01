@@ -10,7 +10,7 @@ Fullstack's flow state. A full-stack TypeScript framework built on [Bun](https:/
 
 </h3>
 
-[![npm version](https://img.shields.io/npm/v/@axi/core.svg)](https://www.npmjs.com/package/@axi/core)
+[![npm version](https://img.shields.io/npm/v/@axi-js/core.svg)](https://www.npmjs.com/package/@axi-js/core)
 
 </div>
 
@@ -65,7 +65,7 @@ Define an API route with the route builder and get a fully typed client automati
 
 ```typescript
 // app/api/users/[id]/route.ts
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 import { z } from "zod";
 
 const Params = z.object({ id: z.string() });
@@ -104,7 +104,7 @@ Create a WebSocket route by exporting `upgrade`, `onOpen`, `onMessage`, and `onC
 
 ```typescript
 // app/ws/chat/route.ts
-import type { ServerWebSocket, WebSocketContext } from "@axi/core";
+import type { ServerWebSocket, WebSocketContext } from "@axi-js/core";
 
 export function onMessage(
   ws: ServerWebSocket,
@@ -128,7 +128,7 @@ Attach middleware with `.use()` and validate `params`, `query`, and `body` with 
 
 ```typescript
 // app/api/orders/route.ts
-import { route, defineMiddleware } from "@axi/core";
+import { route, defineMiddleware } from "@axi-js/core";
 import { z } from "zod";
 
 const requireAuth = defineMiddleware(async (ctx) => {
@@ -152,8 +152,8 @@ Protect pages and share data across routes by exporting a `middleware` function 
 
 ```typescript
 // app/middleware.ts - runs for every page
-import { redirect, getCookie } from "@axi/core";
-import type { MiddlewareContext } from "@axi/core";
+import { redirect, getCookie } from "@axi-js/core";
+import type { MiddlewareContext } from "@axi-js/core";
 
 export async function middleware({ request }: MiddlewareContext) {
   if (!getCookie(request, "auth_token")) return redirect("/auth/login");
@@ -167,7 +167,7 @@ Stream raw chunks with `stream()` or structured events with `sse()`, then consum
 
 ```typescript
 // app/api/stream/route.ts
-import { route, sse, type SSEResponse } from "@axi/core";
+import { route, sse, type SSEResponse } from "@axi-js/core";
 
 export const streamTokens = route.get().handle((): SSEResponse<{ token: string }> => {
   return sse(async function* () {
@@ -191,7 +191,7 @@ export default function Chat() {
 `ApiError` and the `errors` factory produce RFC 7807 Problem Details responses. Validation failures are caught automatically:
 
 ```typescript
-import { route, errors } from "@axi/core";
+import { route, errors } from "@axi-js/core";
 
 export const removeUser = route.delete().handle(() => {
   if (!isAdmin()) throw errors.forbidden();
@@ -204,7 +204,7 @@ export const removeUser = route.delete().handle(() => {
 Both are enabled from `axi.config.ts`:
 
 ```typescript
-import type { AxiConfig } from "@axi/core";
+import type { AxiConfig } from "@axi-js/core";
 
 const config: AxiConfig = {
   cors: { origin: "https://app.example.com", credentials: true },
@@ -216,10 +216,10 @@ export default config;
 
 ### Theme system
 
-`@axi/core/theme` ships an SSR-safe `ThemeProvider` and `useTheme` hook with flash-free light/dark/system theming:
+`@axi-js/core/theme` ships an SSR-safe `ThemeProvider` and `useTheme` hook with flash-free light/dark/system theming:
 
 ```tsx
-import { ThemeProvider, useTheme } from "@axi/core/theme";
+import { ThemeProvider, useTheme } from "@axi-js/core/theme";
 
 export function App() {
   return <ThemeProvider defaultTheme="system">{/* ... */}</ThemeProvider>;
@@ -228,7 +228,7 @@ export function App() {
 
 ### Client hooks
 
-`@axi/core/client` provides `useRouter`, `useParams`, `navigate`, `redirect`, `useIsClient`, `useClientEffect`, and `useStream`. The generated client adds `useQuery` to every API method.
+`@axi-js/core/client` provides `useRouter`, `useParams`, `navigate`, `redirect`, `useIsClient`, `useClientEffect`, and `useStream`. The generated client adds `useQuery` to every API method.
 
 ---
 

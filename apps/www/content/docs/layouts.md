@@ -11,7 +11,7 @@ Every app should have a root layout:
 
 ```tsx
 // app/layout.tsx
-import type { PageMetadata } from "@axi/core";
+import type { PageMetadata } from "@axi-js/core";
 
 export const metadata: PageMetadata = {
   title: "My App",
@@ -117,7 +117,7 @@ Layouts preserve state across navigation. Use them for:
 Layouts can export metadata:
 
 ```tsx
-import type { PageMetadata } from "@axi/core";
+import type { PageMetadata } from "@axi-js/core";
 
 export const metadata: PageMetadata = {
   title: "Dashboard",
@@ -140,7 +140,7 @@ Page metadata takes precedence over layout metadata.
 Show loading indicators during navigation:
 
 ```tsx
-import { useRouter } from "@axi/core/client";
+import { useRouter } from "@axi-js/core/client";
 
 export default function RootLayout({
   children,

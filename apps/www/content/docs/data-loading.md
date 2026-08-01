@@ -14,7 +14,7 @@ Axi uses a loader pattern for server-side data fetching. Loaders run on the serv
 Export a `loader` function from your page:
 
 ```tsx
-import type { LoaderContext, PageProps } from "@axi/core";
+import type { LoaderContext, PageProps } from "@axi-js/core";
 
 export async function loader({ params, query }: LoaderContext) {
   const data = await fetchFromDatabase();
@@ -146,7 +146,7 @@ Loaders work seamlessly with React hooks:
 
 ```tsx
 import { useState, useEffect } from "react";
-import type { LoaderContext, PageProps } from "@axi/core";
+import type { LoaderContext, PageProps } from "@axi-js/core";
 
 export async function loader({ params }: LoaderContext) {
   const initialComments = await db.getComments(params.postId);

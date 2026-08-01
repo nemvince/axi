@@ -1,7 +1,7 @@
 import { Footer } from "@/components/footer";
 import { Navigation } from "@/components/navigation";
-import type { PageMetadata } from "@axi/core";
-import { ThemeProvider } from "@axi/core/theme";
+import type { PageMetadata } from "@axi-js/core";
+import { ThemeProvider } from "@axi-js/core/theme";
 import React from "react";
 import "./index.css";
 

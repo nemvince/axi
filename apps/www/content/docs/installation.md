@@ -61,7 +61,7 @@ my-app/
 Axi works with zero configuration, but you can customize it using `axi.config.ts`:
 
 ```typescript
-import type { AxiConfig } from "@axi/core";
+import type { AxiConfig } from "@axi-js/core";
 
 const config: AxiConfig = {
   port: 3000,

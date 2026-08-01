@@ -55,7 +55,7 @@ Add an API endpoint to fetch posts:
 
 ```typescript
 // app/api/posts/route.ts
-import { route } from "@axi/core";
+import { route } from "@axi-js/core";
 
 const posts = [
   { id: 1, title: "First Post", slug: "first-post" },
@@ -76,7 +76,7 @@ Create a layout to wrap all pages:
 ```tsx
 // app/layout.tsx
 import React from "react";
-import type { PageMetadata } from "@axi/core";
+import type { PageMetadata } from "@axi-js/core";
 
 export const metadata: PageMetadata = {
   title: "My Blog",

@@ -1,5 +1,5 @@
 {
-  "name": "@axi/www",
+  "name": "@axi-js/www",
   "version": "0.1.0",
   "private": true,
   "description": "Axi marketing and documentation website",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@axi/core": "workspace:*",
+    "@axi-js/core": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-slot": "^1.3.3",
     "class-variance-authority": "^0.7.1",
