@@ -6,7 +6,7 @@
 import type { Server } from "bun";
 import type React from "react";
 
-export type RouteParams = Record<string, string>;
+export type RouteParams = Record<string, string | string[]>;
 export type RouteQuery = Record<string, string>;
 export type RouteExtras = Record<string, unknown>;
 export type EmptyExtras = Record<string, never>;

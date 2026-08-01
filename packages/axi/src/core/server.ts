@@ -427,6 +427,7 @@ class AxiServer {
 
         const result = await transpileForBrowser([entryPath], {
           minify: !this.config.development,
+          production: !this.config.development,
         });
 
         if (result.success && result.output) {

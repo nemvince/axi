@@ -47,34 +47,90 @@ function transformFilePath(
 }
 
 /**
+ * Parse a route path segment into its classification
+ * - "static" -> literal segment
+ * - "dynamic" -> [param], matches a single segment
+ * - "catchall" -> [...param] or [[...param]], matches multiple segments
+ */
+function parseSegment(
+  segment: string
+):
+  | { kind: "static"; value: string }
+  | { kind: "dynamic"; name: string }
+  | { kind: "catchall"; name: string; optional: boolean } {
+  const optionalCatchall = segment.match(/^\[\[\.\.\.([^\]]+)\]\]$/);
+  if (optionalCatchall) {
+    return { kind: "catchall", name: optionalCatchall[1]!, optional: true };
+  }
+
+  const catchall = segment.match(/^\[\.\.\.([^\]]+)\]$/);
+  if (catchall) {
+    return { kind: "catchall", name: catchall[1]!, optional: false };
+  }
+
+  const dynamic = segment.match(/^\[([^\]]+)\]$/);
+  if (dynamic) {
+    return { kind: "dynamic", name: dynamic[1]! };
+  }
+
+  return { kind: "static", value: segment };
+}
+
+/**
+ * Build a regex pattern from route path segments, collecting params
+ */
+function buildRoutePattern(
+  routePath: string,
+  paramNames: string[],
+  catchallNames: string[]
+): RegExp {
+  if (routePath === "/") {
+    return /^\/$/;
+  }
+
+  const regexParts = routePath
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      const parsed = parseSegment(segment);
+      switch (parsed.kind) {
+        case "static":
+          return parsed.value;
+        case "dynamic":
+          paramNames.push(parsed.name);
+          return "([^/]+)";
+        case "catchall":
+          paramNames.push(parsed.name);
+          catchallNames.push(parsed.name);
+          return parsed.optional ? "(.*)" : "(.+)";
+      }
+    });
+
+  return new RegExp("^/" + regexParts.join("/") + "$");
+}
+
+/**
  * Convert file path to route pattern
  * /app/blog/[slug]/page.tsx -> /blog/:slug
  * /app/api/users/[id]/route.ts -> /api/users/:id
  * /ws/chat/[room]/route.ts -> /ws/chat/:room
+ * /app/blog/[...slug]/page.tsx -> /blog/:slug (catch-all)
  */
 export function filePathToRoute(
   filePath: string,
   type: "page" | "api" | "ws"
 ): Route {
-  let routePath = transformFilePath(filePath, type);
+  const routePath = normalizeRoutePath(transformFilePath(filePath, type));
 
-  // Extract parameter names and convert [param] to :param
   const paramNames: string[] = [];
-  routePath = routePath.replace(/\[([^\]]+)\]/g, (_, paramName) => {
-    paramNames.push(paramName);
-    return ":" + paramName;
-  });
-
-  // Normalize and create regex pattern
-  routePath = normalizeRoutePath(routePath);
-  const pattern = new RegExp(
-    "^" + routePath.replace(/:[^/]+/g, "([^/]+)") + "$"
-  );
+  const catchallNames: string[] = [];
+  const pattern = buildRoutePattern(routePath, paramNames, catchallNames);
 
   return {
     pattern,
     filepath: filePath,
     paramNames,
+    catchallNames,
     type,
   };
 }
@@ -132,9 +188,14 @@ export function matchRoute(req: Request, route: Route): RouteMatch | null {
     return null;
   }
 
-  const params: Record<string, string> = {};
+  const params: Record<string, string | string[]> = {};
   route.paramNames.forEach((name, i) => {
-    params[name] = match[i + 1] || "";
+    const value = match[i + 1] || "";
+    params[name] = route.catchallNames?.includes(name)
+      ? value
+        ? value.split("/")
+        : []
+      : value;
   });
 
   const query: Record<string, string> = {};
@@ -173,12 +234,27 @@ export function sortRoutes(routes: Route[]): Route[] {
 /**
  * Convert Axi route pattern to Bun.serve route path
  * Converts [param] syntax to :param for Bun's router
+ * Converts [...param] / [[...param]] catch-all syntax to * wildcards
  */
 export function toBunRoutePath(route: Route): string {
-  const path = transformFilePath(route.filepath, route.type).replace(
-    /\[([^\]]+)\]/g,
-    ":$1"
-  );
+  const path = transformFilePath(route.filepath, route.type)
+    .split("/")
+    .map((segment) => {
+      const parsed = parseSegment(segment);
+      if (parsed.kind === "catchall") return "*";
+      if (parsed.kind === "dynamic") return ":" + parsed.name;
+      return segment;
+    })
+    .join("/");
 
   return normalizeRoutePath(path);
+}
+
+/**
+ * Convert a route to its client-facing path
+ * Preserves [param] and [...param] tokens so the client can substitute them
+ * /app/api/files/[...slug]/route.ts -> /api/files/[...slug]
+ */
+export function routeToClientPath(route: Route): string {
+  return normalizeRoutePath(transformFilePath(route.filepath, route.type));
 }

@@ -179,6 +179,8 @@ export async function transpileForBrowser(
   options: {
     minify?: boolean;
     external?: string[];
+    /** When true, bundles production builds (e.g. React) by defining NODE_ENV. */
+    production?: boolean;
   } = {}
 ): Promise<{ success: boolean; output?: string; logs?: unknown[] }> {
   const singletonPlugin = getReactSingletonPlugin();
@@ -198,6 +200,13 @@ export async function transpileForBrowser(
     format: "esm",
     minify: options.minify ?? false,
     external: options.external ?? [],
+    // Define NODE_ENV so React (and friends) resolve to their production build
+    // and the development bundle is tree-shaken out of the client output.
+    define: {
+      "process.env.NODE_ENV": JSON.stringify(
+        options.production ? "production" : "development"
+      ),
+    },
     plugins,
   });
 

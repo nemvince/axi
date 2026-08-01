@@ -102,6 +102,7 @@ export async function buildForProduction(
   const buildResult = await transpileForBrowser([entryPath], {
     minify: true,
     external: [],
+    production: true,
   });
 
   if (!buildResult.success || !buildResult.output) {
