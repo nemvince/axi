@@ -81,4 +81,19 @@ const serverConfig = await buildServerConfig(config);
 console.log(serverConfig.readyMessage);
 
 // Start HTTP server
-Bun.serve(serverConfig);
+const server = Bun.serve(serverConfig);
+
+let isClosing = false
+const handleClose = async () => {
+  if (isClosing) return
+  isClosing = true
+
+  console.warn("\n ○ Goodbye!")
+  // TODO: make this configurable
+  await server.stop(true)
+  server.unref()
+  process.exit(0)
+}
+
+process.on("SIGINT", handleClose)
+process.on("SIGTERM", handleClose)
