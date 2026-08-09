@@ -13,29 +13,19 @@ WORKDIR /app
 COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile
 
+# .dockerignore keeps node_modules, .git, .env, etc. out of the build context.
 COPY . .
-# public/ and axi.config.ts are optional; ensure they exist so the
-# runtime stage can copy them unconditionally.
-RUN mkdir -p public \
-  && test -f axi.config.ts || printf 'export default {};\n' > axi.config.ts \
-  && bun run build
+RUN bun run build
 
-# Stage 2: production dependencies only
-FROM oven/bun:1 AS deps
-WORKDIR /app
-COPY package.json bun.lock* ./
-RUN bun install --production --frozen-lockfile
-
-# Stage 3: minimal runtime image
+# Stage 2: minimal runtime image
 FROM oven/bun:1-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=build /app/.axi ./.axi
-COPY --from=build /app/app ./app
-COPY --from=build /app/public ./public
-COPY --from=build /app/axi.config.ts ./axi.config.ts
+# Copy the whole app: app/, components/, lib/, public/, tsconfig.json, and
+# the prebuilt .axi/ artifacts all land in the image. The SSR server imports
+# app source (e.g. @/components/*) at runtime, so every directory must ship.
+COPY --from=build /app ./
 
 EXPOSE 3000
 CMD ["bun", "run", "start", "--hostname", "0.0.0.0"]

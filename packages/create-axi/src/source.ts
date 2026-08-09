@@ -40,7 +40,7 @@ const CATALOG: Record<string, string> = {
 };
 
 // Fallback if the npm lookup fails. Keep in sync with the latest published release.
-const AXI_VERSION_FALLBACK = "^0.1.2";
+const AXI_VERSION_FALLBACK = "^0.1.3";
 
 export function getAvailableTemplates(): string[] {
   return Object.keys(TEMPLATES);
