@@ -7,9 +7,10 @@ name: Publish to npm
 #
 # Every publishable package whose version isn't already on the registry is
 # published with npm trusted publishing (OIDC) + provenance — no npm token
-# secrets required. Bun's own `bun publish` does not support provenance yet
-# (oven-sh/bun#19600 is CSS-only; provenance support is tracked separately),
-# so publishing uses the npm CLI via `bunx npm`.
+# secrets required. Publishing needs real Node: npm's OIDC trusted-publishing
+# flow does not work under Bun (oven-sh/bun#22423), so a minimal Node setup
+# is kept solely to run the npm CLI. Everything else (install, build, test)
+# stays on Bun.
 
 on:
   push:
@@ -28,6 +29,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -54,34 +57,47 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
+      # The only Node in the pipeline — the npm CLI's OIDC trusted-publishing
+      # flow requires it (see header comment).
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing requires npm >= 11.5.1; Node 22 ships npm 10 which
+      # signs provenance but cannot exchange the OIDC token, so the publish
+      # PUT goes out unauthenticated (404 / ENEEDAUTH, see npm/cli#9088).
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@11
+
       - name: Install dependencies
         run: bun install
 
-      # Publishing shells out to the npm CLI via `bunx npm` — Bun's own
-      # `bun publish` can't do trusted publishing/provenance, and bunx always
-      # resolves a current npm (>= 11.5.1), which trusted publishing requires.
       - name: Publish @axi-js/core
         working-directory: packages/axi
         run: |
-          VERSION=$(bun -e "console.log(require('./package.json').version)")
-          if bunx npm view "@axi-js/core@${VERSION}" version >/dev/null 2>&1; then
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@axi-js/core@${VERSION}" version >/dev/null 2>&1; then
             echo "✓ @axi-js/core@${VERSION} already published, skipping"
           else
-            bunx npm publish --provenance --access public
+            npm publish --provenance --access public
           fi
 
       - name: Publish create-axi
         working-directory: packages/create-axi
         run: |
-          VERSION=$(bun -e "console.log(require('./package.json').version)")
-          if bunx npm view "create-axi@${VERSION}" version >/dev/null 2>&1; then
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "create-axi@${VERSION}" version >/dev/null 2>&1; then
             echo "✓ create-axi@${VERSION} already published, skipping"
           else
-            bunx npm publish --provenance --access public
+            npm publish --provenance --access public
           fi
