@@ -241,6 +241,16 @@ export function App() {
 
 `@axi-js/core/client` provides `useRouter`, `useParams`, `navigate`, `redirect`, `useIsClient`, `useClientEffect`, and `useStream`. The generated client adds `useQuery` to every API method.
 
+### CSS & package styles
+
+Import CSS from your layouts and pages — relative files, package subpaths (`@import "pkg/styles.css"`), and bare package names all work. Bare package imports resolve through the package.json `style` field, like Vite:
+
+```css
+@import "bootstrap"; /* resolves to bootstrap's `style` field */
+```
+
+This is worked around in the framework because Bun does not honor the `style` field yet ([oven-sh/bun#19600](https://github.com/oven-sh/bun/issues/19600)).
+
 ---
 
 ## Why Axi?

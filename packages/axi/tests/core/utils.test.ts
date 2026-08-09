@@ -8,6 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import {
+  createStyleFieldPlugin,
   fileExists,
   findAllCssFiles,
   generateHash,
@@ -411,5 +412,174 @@ export default Page;`
     const cssFiles = await findAllCssFiles([]);
 
     expect(cssFiles.length).toBe(0);
+  });
+});
+
+describe("createStyleFieldPlugin", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "axi-style-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  // Creates a node_modules fixture with a package that has a `style` field
+  // (like datatables.net-dt / bootstrap) plus a scoped variant.
+  async function createFixture(): Promise<void> {
+    await mkdir(join(tempDir, "node_modules", "fake-pkg", "css"), {
+      recursive: true,
+    });
+    await mkdir(join(tempDir, "node_modules", "@scope", "pkg", "styles"), {
+      recursive: true,
+    });
+    await mkdir(join(tempDir, "node_modules", "nostyle-pkg"), {
+      recursive: true,
+    });
+
+    await writeFile(
+      join(tempDir, "node_modules", "fake-pkg", "package.json"),
+      JSON.stringify({
+        name: "fake-pkg",
+        version: "1.0.0",
+        main: "index.js",
+        style: "css/fake.css",
+      })
+    );
+    await writeFile(
+      join(tempDir, "node_modules", "fake-pkg", "index.js"),
+      'export const marker = "js-main-entry";'
+    );
+    await writeFile(
+      join(tempDir, "node_modules", "fake-pkg", "css", "fake.css"),
+      ".fake { color: red; }"
+    );
+
+    await writeFile(
+      join(tempDir, "node_modules", "@scope", "pkg", "package.json"),
+      JSON.stringify({
+        name: "@scope/pkg",
+        version: "1.0.0",
+        main: "index.js",
+        style: "styles/main.css",
+      })
+    );
+    await writeFile(
+      join(tempDir, "node_modules", "@scope", "pkg", "index.js"),
+      "export default {};"
+    );
+    await writeFile(
+      join(tempDir, "node_modules", "@scope", "pkg", "styles", "main.css"),
+      ".scoped { color: green; }"
+    );
+
+    await writeFile(
+      join(tempDir, "node_modules", "nostyle-pkg", "package.json"),
+      JSON.stringify({
+        name: "nostyle-pkg",
+        version: "1.0.0",
+        main: "index.js",
+      })
+    );
+    await writeFile(
+      join(tempDir, "node_modules", "nostyle-pkg", "index.js"),
+      "export default {};"
+    );
+  }
+
+  test("resolves bare @import to the package style field", async () => {
+    await createFixture();
+    const entry = join(tempDir, "main.css");
+    await writeFile(entry, '@import "fake-pkg";\n.entry { color: blue; }');
+
+    const result = await Bun.build({
+      entrypoints: [entry],
+      plugins: [createStyleFieldPlugin()],
+    });
+
+    expect(result.success).toBe(true);
+    const output = await result.outputs[0]!.text();
+    // The package's style CSS is inlined instead of its JS main entry
+    expect(output).toContain(".fake");
+    expect(output).toContain("color: red");
+    expect(output).toContain(".entry");
+    expect(output).not.toContain("export default");
+  });
+
+  test("resolves @import with media query and url() forms", async () => {
+    await createFixture();
+    const entry = join(tempDir, "main.css");
+    await writeFile(
+      entry,
+      '@import "fake-pkg" screen;\n@import url("fake-pkg");\n.entry { color: blue; }'
+    );
+
+    const result = await Bun.build({
+      entrypoints: [entry],
+      plugins: [createStyleFieldPlugin()],
+    });
+
+    expect(result.success).toBe(true);
+    const output = await result.outputs[0]!.text();
+    expect(output).toContain(".fake");
+    expect(output).toContain("color: red");
+  });
+
+  test("resolves scoped package imports via style field", async () => {
+    await createFixture();
+    const entry = join(tempDir, "main.css");
+    await writeFile(entry, '@import "@scope/pkg";\n.entry { color: blue; }');
+
+    const result = await Bun.build({
+      entrypoints: [entry],
+      plugins: [createStyleFieldPlugin()],
+    });
+
+    expect(result.success).toBe(true);
+    const output = await result.outputs[0]!.text();
+    expect(output).toContain(".scoped");
+    expect(output).toContain("color: green");
+  });
+
+  test("leaves packages without a style field to Bun's resolver", async () => {
+    await createFixture();
+    const entry = join(tempDir, "main.css");
+    await writeFile(entry, '@import "nostyle-pkg";\n.entry { color: blue; }');
+
+    // The plugin does not mask the missing style field: Bun still fails on
+    // the JS main entry, same as without the plugin.
+    const err = await Bun.build({
+      entrypoints: [entry],
+      plugins: [createStyleFieldPlugin()],
+    }).then(
+      () => null,
+      (e: unknown) => e
+    );
+
+    expect(err).not.toBeNull();
+    const buildError = err as { errors?: { message?: string }[] };
+    expect(buildError.errors?.[0]?.message).toMatch(/Cannot import/);
+  });
+
+  test("does not affect JS import resolution", async () => {
+    await createFixture();
+    const entry = join(tempDir, "entry.js");
+    await writeFile(
+      entry,
+      'import { marker } from "fake-pkg";\nconsole.log(marker);'
+    );
+
+    const result = await Bun.build({
+      entrypoints: [entry],
+      plugins: [createStyleFieldPlugin()],
+    });
+
+    // JS imports keep resolving to the package main, not the style field
+    expect(result.success).toBe(true);
+    const output = await result.outputs[0]!.text();
+    expect(output).toContain("js-main-entry");
+    expect(output).not.toContain(".fake");
   });
 });

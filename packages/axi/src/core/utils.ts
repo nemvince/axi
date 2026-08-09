@@ -7,7 +7,7 @@ import type { BunPlugin } from "bun";
 import { createHash } from "crypto";
 import { createRequire } from "module";
 import { copyFile, mkdir } from "node:fs/promises";
-import { join, resolve } from "path";
+import { dirname, join, resolve } from "path";
 
 /**
  * Extract error message from unknown error value
@@ -147,6 +147,86 @@ export function createAssetLoaderPlugin(): BunPlugin {
 }
 
 /**
+ * Bare package specifier in a CSS context (e.g. `@import "pkg"` or
+ * `@import "@scope/pkg"`), mirroring what Vite resolves via the `style` field.
+ */
+const BARE_PACKAGE_RE = /^(@[^/]+\/)?[^./][^/]*$/;
+
+/**
+ * Find the package.json of a bare package specifier, walking up from the
+ * importer's directory (Node semantics) with a cwd-based fallback.
+ */
+async function findPackageJsonPath(
+  packageName: string,
+  importer?: string
+): Promise<string | null> {
+  const candidates = new Set<string>();
+
+  if (importer) {
+    let dir = dirname(importer);
+    while (true) {
+      candidates.add(join(dir, "node_modules", packageName, "package.json"));
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+
+  for (const nodeModulesPath of findNodeModulesPaths()) {
+    candidates.add(join(nodeModulesPath, packageName, "package.json"));
+  }
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Resolve a bare package specifier in a CSS `@import` to the package.json
+ * `style` field, like Vite's CSS resolver (mainFields: ["style"]). Bun
+ * resolves bare CSS imports through the JS `main`/`exports` fields and fails
+ * with "Cannot import a '.js' file into a CSS file"
+ * (https://github.com/oven-sh/bun/issues/19600) — this works around that.
+ * Returns null when the package or its `style` field can't be resolved.
+ */
+async function resolvePackageStyle(
+  packageName: string,
+  importer?: string
+): Promise<string | null> {
+  const packageJsonPath = await findPackageJsonPath(packageName, importer);
+  if (!packageJsonPath) return null;
+
+  try {
+    const pkg = JSON.parse(await Bun.file(packageJsonPath).text());
+    if (typeof pkg.style !== "string" || !pkg.style) return null;
+    return resolve(dirname(packageJsonPath), pkg.style);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Create a plugin that resolves bare package specifiers in CSS `@import`
+ * rules (kind "import-rule") to the package.json `style` field. Bun does not
+ * honor the `style` field and would otherwise resolve the package's JS
+ * `main` entry and fail. Relative, absolute, and extension-suffixed imports
+ * are left to Bun's native CSS resolver.
+ */
+export function createStyleFieldPlugin(): BunPlugin {
+  return {
+    name: "axi-css-style-field",
+    setup(build) {
+      build.onResolve({ filter: BARE_PACKAGE_RE }, async (args) => {
+        if (args.kind !== "import-rule") return undefined;
+        const stylePath = await resolvePackageStyle(args.path, args.importer);
+        return stylePath ? { path: stylePath } : undefined;
+      });
+    },
+  };
+}
+
+/**
  * Track whether runtime asset plugin has been registered
  */
 let assetPluginRegistered = false;
@@ -186,7 +266,10 @@ export async function transpileForBrowser(
   const singletonPlugin = getReactSingletonPlugin();
   const assetLoaderPlugin = createAssetLoaderPlugin();
 
-  const plugins = [assetLoaderPlugin];
+  // The client build also processes CSS imported from JS (layout/page files),
+  // so bare `@import "pkg"` inside those styles needs the style-field
+  // resolution as well (oven-sh/bun#19600).
+  const plugins = [assetLoaderPlugin, createStyleFieldPlugin()];
   if (singletonPlugin) {
     plugins.push(singletonPlugin);
   }

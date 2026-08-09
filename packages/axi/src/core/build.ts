@@ -15,6 +15,7 @@ import {
     scanWsRoutes,
 } from "./scanner";
 import {
+    createStyleFieldPlugin,
     fileExists,
     findAllCssFiles,
     generateHash,
@@ -147,7 +148,9 @@ export async function buildForProduction(
     const cssResult = await Bun.build({
       entrypoints: cssFiles,
       minify: true,
-      plugins: plugins.length ? plugins : undefined,
+      // Resolves bare CSS @imports like `@import "pkg"` via the package.json
+      // `style` field, which Bun doesn't handle (oven-sh/bun#19600)
+      plugins: [createStyleFieldPlugin(), ...plugins],
     });
 
     if (cssResult.success && cssResult.outputs.length > 0) {
