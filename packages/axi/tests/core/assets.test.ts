@@ -4,9 +4,13 @@
  */
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "path";
-import { generateHash, registerAssetPlugin } from "../../src/core/utils";
+import {
+  createAssetLoaderPlugin,
+  generateHash,
+  registerAssetPlugin,
+} from "../../src/core/utils";
 
 describe("Asset Import Plugin", () => {
   const fixturesDir = join(import.meta.dir, "../fixtures/asset-test");
@@ -94,6 +98,57 @@ describe("Asset Import Plugin", () => {
       }
     } catch {
       // Skip if import fails
+    }
+  });
+
+  test("createAssetLoaderPlugin leaves CSS url() assets to Bun", async () => {
+    // Regression: rewriting a CSS url()-referenced asset into a JS module
+    // broke @font-face src rules ("Cannot import a '.js' file into a CSS
+    // file"). The plugin must skip CSS url() resolution entirely.
+    const fontPath = join(fixturesDir, "test-font.woff2");
+    const cssPath = join(fixturesDir, "font.css");
+    try {
+      await Bun.write(fontPath, new Uint8Array([0, 1, 2, 3, 4, 5]));
+      await Bun.write(
+        cssPath,
+        '@font-face {\n  font-family: Test;\n  src: url("./test-font.woff2") format("woff2");\n}\n'
+      );
+
+      const result = await Bun.build({
+        entrypoints: [cssPath],
+        target: "browser",
+        plugins: [createAssetLoaderPlugin()],
+      });
+
+      expect(result.success).toBe(true);
+      // Bun inlines the small font as a data URL instead of a JS module
+      const output = await result.outputs[0]!.text();
+      expect(output).toContain("data:font/woff2");
+    } finally {
+      await rm(fontPath, { force: true });
+      await rm(cssPath, { force: true });
+    }
+  });
+
+  test("createAssetLoaderPlugin rewrites JS asset imports to framework URL", async () => {
+    const entryPath = join(fixturesDir, "asset-entry.js");
+    try {
+      await Bun.write(
+        entryPath,
+        'import logo from "./test-logo.svg";\nconsole.log(logo);\n'
+      );
+
+      const result = await Bun.build({
+        entrypoints: [entryPath],
+        target: "browser",
+        plugins: [createAssetLoaderPlugin()],
+      });
+
+      expect(result.success).toBe(true);
+      const output = await result.outputs[0]!.text();
+      expect(output).toContain("/__axi/assets/");
+    } finally {
+      await rm(entryPath, { force: true });
     }
   });
 });

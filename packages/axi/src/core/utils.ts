@@ -138,10 +138,38 @@ export function createAssetLoaderPlugin(): BunPlugin {
   return {
     name: "axi-asset-loader",
     setup(build) {
-      build.onLoad({ filter: assetPattern }, async (args) => {
-        const result = await processAssetFile(args.path);
-        return result ? { contents: result.contents, loader: "js" } : undefined;
+      build.onResolve({ filter: assetPattern }, (args) => {
+        // CSS url() references (e.g. @font-face src) arrive as kind
+        // "internal" and must keep resolving to the raw asset file — Bun
+        // handles those natively and would reject a JS module in their place
+        // ("Cannot import a '.js' file into a CSS file"). Only JS imports of
+        // assets get rewritten to a framework URL.
+        if (args.kind === "internal" || args.kind === "url-token") {
+          return undefined;
+        }
+        // onResolve paths are relative to the importer — absolutize so the
+        // asset lands in .axi/assets deterministically.
+        const resolvedPath = resolve(args.resolveDir, args.path);
+        // Out-of-project assets keep Bun's native handling (same guard as
+        // processAssetFile).
+        if (!resolvedPath.startsWith(process.cwd() + "/")) {
+          return undefined;
+        }
+        return { path: resolvedPath, namespace: "axi-asset" };
       });
+
+      build.onLoad(
+        { filter: assetPattern, namespace: "axi-asset" },
+        async (args) => {
+          const result = await processAssetFile(args.path);
+          if (result) return { contents: result.contents, loader: "js" };
+          // Last resort: emit the raw file as an asset (e.g. copy failure)
+          return {
+            contents: await Bun.file(args.path).arrayBuffer(),
+            loader: "file",
+          };
+        }
+      );
     },
   };
 }
