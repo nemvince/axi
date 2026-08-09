@@ -13,4 +13,4 @@ coverage
 .idea
 Dockerfile
 .dockerignore
-docker-compose.yml
+compose.yml
