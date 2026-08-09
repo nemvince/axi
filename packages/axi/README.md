@@ -274,3 +274,17 @@ Axi combines patterns from Next.js (file-based routing) and tRPC (end-to-end typ
 
 - [examples/basic](./examples/basic) - Pages, layouts, loaders, API routes, and streaming
 - [examples/with-tailwind](./examples/with-tailwind) - Styled with Tailwind CSS v4 and shadcn/ui
+
+## Releasing
+
+Publishing is automated via [GitHub Actions](/.github/workflows/publish.yml) using npm trusted publishing (OIDC) with provenance — no token secrets in CI.
+
+1. Bump the `version` in `packages/axi/package.json` (and `packages/create-axi/package.json` if it changed).
+2. Commit with the `publish axi X.Y.Z` message and push.
+3. Push a matching tag — the workflow runs tests, then publishes every package whose version isn't already on the registry:
+
+   ```sh
+   git tag v0.1.2 && git push origin v0.1.2
+   ```
+
+One-time setup: enable trusted publishing on npm for the `@axi-js` scope/org, pointing at this repository and the `publish.yml` workflow (npmjs.com → Access Tokens → GitHub Actions).

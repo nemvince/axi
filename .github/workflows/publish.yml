@@ -1,0 +1,92 @@
+name: Publish to npm
+
+# Triggered by version tags (vX.Y.Z). Bump the version in the package(s) you
+# want to release, commit, then push a tag:
+#
+#   git tag v0.1.2 && git push origin v0.1.2
+#
+# Every publishable package whose version isn't already on the registry is
+# published with npm trusted publishing (OIDC) + provenance — no npm token
+# secrets required. Bun's own `bun publish` does not support provenance yet
+# (oven-sh/bun#19600 is CSS-only; provenance support is tracked separately),
+# so publishing uses the npm CLI.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  # Lets npm mint a short-lived OIDC token for trusted publishing/provenance
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build apps
+        run: bun run --filter '@axi-js/*-example' --filter '@axi-js/www' build
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Run tests
+        run: bun test
+        working-directory: packages/axi
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # npm CLI does the publishing (trusted publishing / provenance); Bun
+      # keeps the lockfile/install in sync.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Publish @axi-js/core
+        working-directory: packages/axi
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@axi-js/core@${VERSION}" version >/dev/null 2>&1; then
+            echo "✓ @axi-js/core@${VERSION} already published, skipping"
+          else
+            npm publish --provenance --access public
+          fi
+
+      - name: Publish create-axi
+        working-directory: packages/create-axi
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "create-axi@${VERSION}" version >/dev/null 2>&1; then
+            echo "✓ create-axi@${VERSION} already published, skipping"
+          else
+            npm publish --provenance --access public
+          fi
